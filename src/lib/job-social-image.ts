@@ -63,13 +63,23 @@ export async function importJobSocialImage(jobId: string, photoId: number, sourc
     endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
   });
-  await client.send(new PutObjectCommand({
-    Bucket: config.bucket,
-    Key: key,
-    Body: optimized,
-    ContentType: "image/jpeg",
-    CacheControl: "public, max-age=31536000, immutable",
-  }));
+  try {
+    await client.send(new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: optimized,
+      ContentType: "image/jpeg",
+      CacheControl: "public, max-age=31536000, immutable",
+    }));
+  } catch (error) {
+    const status = typeof error === "object" && error !== null && "$metadata" in error
+      ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+      : undefined;
+    if (status === 403) {
+      throw new Error(`R2 credentials do not have Object Read & Write access to the "${config.bucket}" bucket.`);
+    }
+    throw error;
+  }
 
   return publicUrl(config.publicDomain, key);
 }

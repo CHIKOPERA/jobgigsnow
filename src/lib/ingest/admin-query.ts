@@ -227,6 +227,51 @@ export async function listReviewJobs() {
   return { pending, recentlyPublished };
 }
 
+export async function listPublishedJobs({
+  query = "",
+  category,
+  page = 1,
+  pageSize = 30,
+}: {
+  query?: string;
+  category?: "JOB" | "INTERNSHIP" | "LEARNERSHIP" | "APPRENTICESHIP" | "GRADUATE_PROGRAMME" | "CALL_FOR_APPLICATIONS" | "FUNDING";
+  page?: number;
+  pageSize?: number;
+}) {
+  const where = {
+    status: "PUBLISHED" as const,
+    ...(category && { category }),
+    ...(query && {
+      OR: [
+        { title: { contains: query, mode: "insensitive" as const } },
+        { company: { name: { contains: query, mode: "insensitive" as const } } },
+        { location: { contains: query, mode: "insensitive" as const } },
+      ],
+    }),
+  };
+  const [jobs, total] = await Promise.all([
+    prisma.job.findMany({
+      where,
+      orderBy: [{ postedAt: "desc" }, { updatedAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        category: true,
+        location: true,
+        postedAt: true,
+        updatedAt: true,
+        socialImageUrl: true,
+        company: { select: { name: true } },
+      },
+    }),
+    prisma.job.count({ where }),
+  ]);
+  return { jobs, total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
 export async function getReviewJob(id: string) {
   return prisma.job.findUnique({
     where: { id },

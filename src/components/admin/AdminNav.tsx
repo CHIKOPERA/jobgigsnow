@@ -7,6 +7,7 @@ const DESTINATIONS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/crawl", label: "Quick crawl" },
   { href: "/admin/review", label: "Review" },
+  { href: "/admin/content", label: "Content" },
   { href: "/admin/runs", label: "Runs" },
   { href: "/admin/sources", label: "Sources" },
   { href: "/admin/failures", label: "Failures" },

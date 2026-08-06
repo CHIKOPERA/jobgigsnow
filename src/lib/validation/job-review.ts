@@ -23,3 +23,15 @@ export const rewriteJobSchema = z.object({
   prompt: z.string().trim().min(3).max(4_000),
   description: z.string().min(1).max(200_000),
 });
+
+export const manualJobCreateSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  companyName: z.string().trim().min(1).max(160),
+  category: opportunityCategorySchema,
+  location: z.string().trim().min(1).max(240),
+  remoteType: remoteTypeSchema,
+  employmentType: employmentTypeSchema,
+  description: z.string().trim().min(1).max(200_000),
+  highlights: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+  applyUrl: nullableUrl,
+});
