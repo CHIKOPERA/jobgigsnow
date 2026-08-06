@@ -16,6 +16,7 @@ import { upsertJob } from "./job-service";
 import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
 import { finalizeRunIfComplete, incrementRunCounters, recordFailure } from "./run-tracking";
+import { seoRewrite } from "./seo-rewrite";
 import type { RawExtractionBundle } from "./types";
 
 function timeBudget(startedAt: number): boolean {
@@ -256,13 +257,43 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
         });
       }
     } else {
+      // SEO rewrite is a text-quality pass on already-valid fields, not a data-extraction step —
+      // its failure must never block Job creation. On failure, the pre-rewrite aggregated
+      // title/description/tags are used as-is; the reviewer can always re-run "Rewrite with AI"
+      // manually from /admin/review afterward.
+      let seoOutcome: Awaited<ReturnType<typeof seoRewrite>> | null = null;
+      try {
+        seoOutcome = await seoRewrite({
+          title: normalized.input.title,
+          companyName: normalized.input.companyName,
+          location: normalized.input.location,
+          remoteType: normalized.input.remoteType,
+          employmentType: normalized.input.employmentType,
+          description: normalized.input.description,
+          tags: normalized.input.tags,
+        });
+        normalized.input.title = seoOutcome.title;
+        normalized.input.description = seoOutcome.description;
+        normalized.input.tags = seoOutcome.tags;
+        normalized.input.rewritePrompt = seoOutcome.promptTemplate;
+      } catch (seoError) {
+        if (row.ingestRunId) {
+          await recordFailure({
+            ingestRunId: row.ingestRunId,
+            rawJobId: row.id,
+            stage: "SEO_REWRITE",
+            url: row.externalUrl,
+            message: seoError instanceof Error ? seoError.message : String(seoError),
+          });
+        }
+      }
+
       // Job upsert happens outside the transaction below — if the process crashes between the two,
       // the worst case is one wasted retry next tick (needsAggregation stays true, re-aggregating
       // re-upserts the *same* slug via normalize()'s slug-stability lookup), never a duplicate Job.
       const job = await upsertJob(normalized.input);
 
-      await prisma.$transaction([
-        prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
+      const improvementRunCreates = [
         prisma.improvementRun.create({
           data: {
             rawJobId: row.id,
@@ -277,6 +308,33 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
             finishedAt: new Date(),
           },
         }),
+      ];
+      if (seoOutcome) {
+        improvementRunCreates.push(
+          prisma.improvementRun.create({
+            data: {
+              rawJobId: row.id,
+              jobId: job.id,
+              model: aiConfig.model,
+              promptVersion: "seo-rewrite-v1",
+              inputTokens: seoOutcome.inputTokens,
+              outputTokens: seoOutcome.outputTokens,
+              diff: {
+                kind: "seo_rewrite",
+                promptTemplate: seoOutcome.promptTemplate,
+                after: { title: seoOutcome.title, description: seoOutcome.description, tags: seoOutcome.tags },
+              } as Prisma.InputJsonValue,
+              status: "SUCCEEDED",
+              startedAt: new Date(),
+              finishedAt: new Date(),
+            },
+          }),
+        );
+      }
+
+      await prisma.$transaction([
+        prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
+        ...improvementRunCreates,
       ]);
     }
 

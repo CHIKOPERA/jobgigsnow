@@ -45,6 +45,10 @@ export const jobUpsertInputSchema = z.object({
   highlights: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   applyUrl: z.string().nullable().optional(),
+  /// The SEO rewrite template that produced this title/description, if the automatic post-
+  /// aggregation SEO rewrite stage ran — shown back to the reviewer in /admin/review so
+  /// "Rewrite with AI" there re-applies (or lets them tweak) the same prompt.
+  rewritePrompt: z.string().nullable().optional(),
   isNative: z.boolean().default(false),
   status: jobStatusSchema,
   postedAt: z.iso.datetime().nullable().optional(),

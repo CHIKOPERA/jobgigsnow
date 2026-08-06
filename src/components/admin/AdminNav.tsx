@@ -11,6 +11,7 @@ const DESTINATIONS = [
   { href: "/admin/runs", label: "Runs" },
   { href: "/admin/sources", label: "Sources" },
   { href: "/admin/failures", label: "Failures" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export function AdminNav() {

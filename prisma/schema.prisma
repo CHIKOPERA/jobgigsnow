@@ -140,6 +140,7 @@ enum IngestFailureStage {
   AGGREGATION
   VALIDATION
   PERSISTENCE
+  SEO_REWRITE
 }
 
 /// Human-readable per-URL error detail — nothing else in the schema captures more than a bare
@@ -370,6 +371,21 @@ model Course {
   updatedAt     DateTime  @updatedAt
 
   @@index([published, publishedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Admin-configurable settings — a singleton row (id is always "singleton"), not a generic
+// key-value table: there's exactly one setting today (seoRewritePrompt), and a KV table would be
+// unused flexibility until a second setting actually shows up.
+// ---------------------------------------------------------------------------
+
+model AdminSetting {
+  id               String   @id @default("singleton")
+  /// Template used by the automatic post-aggregation SEO rewrite stage (src/lib/ingest/seo-rewrite.ts).
+  /// Supports {{title}}/{{company}}/{{location}}/{{remoteType}}/{{employmentType}}/{{description}}/{{tags}}
+  /// placeholders. Falls back to DEFAULT_SEO_REWRITE_PROMPT (src/lib/ingest/settings.ts) if no row exists.
+  seoRewritePrompt String
+  updatedAt        DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
