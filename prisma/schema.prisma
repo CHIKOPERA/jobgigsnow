@@ -1,0 +1,320 @@
+// Hirelane job board — data model.
+// Covers all three pipeline stages (sourcing, improving, posting); Phase 1 UI reads only
+// Job rows with status = PUBLISHED. See docs/todo/01-data-model.md and 06-phase-2-handoff.md.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Stage 1: Sourcing
+// ---------------------------------------------------------------------------
+
+model Source {
+  id             String    @id @default(cuid())
+  name           String
+  baseUrl        String
+  /// Crawl strategy + CSS/XPath selector config, owned entirely by phase 2.
+  crawlConfig    Json
+  cadenceMinutes Int       @default(360)
+  enabled        Boolean   @default(true)
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  rawJobs RawJob[]
+
+  @@index([enabled])
+}
+
+enum FetchStatus {
+  PENDING
+  FETCHED
+  FAILED
+}
+
+model RawJob {
+  id           String      @id @default(cuid())
+  sourceId     String
+  source       Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  externalId   String
+  externalUrl  String
+  rawTitle     String?
+  rawCompany   String?
+  rawLocation  String?
+  /// Full untouched payload as scraped, shape owned by phase 2.
+  payload      Json
+  /// Hash of the payload, used to detect unchanged re-crawls.
+  contentHash  String
+  fetchStatus  FetchStatus @default(PENDING)
+  discoveredAt DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  improvementRuns ImprovementRun[]
+  job             Job?
+
+  // Idempotent ingestion: re-posting the same (source, externalId) upserts, never duplicates.
+  @@unique([sourceId, externalId])
+  @@index([contentHash])
+  @@index([fetchStatus])
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2: Improving
+// ---------------------------------------------------------------------------
+
+enum ImprovementStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model ImprovementRun {
+  id            String            @id @default(cuid())
+  rawJobId      String
+  rawJob        RawJob            @relation(fields: [rawJobId], references: [id], onDelete: Cascade)
+  jobId         String?
+  job           Job?              @relation(fields: [jobId], references: [id])
+  model         String
+  promptVersion String
+  inputTokens   Int?
+  outputTokens  Int?
+  /// Rewrite diff or before/after snapshot, shape owned by phase 2.
+  diff          Json?
+  status        ImprovementStatus @default(PENDING)
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([rawJobId])
+  @@index([jobId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Stage 3: Posting (Phase 1 — this is what the public UI reads)
+// ---------------------------------------------------------------------------
+
+enum JobStatus {
+  DISCOVERED
+  IMPROVING
+  READY
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+  REJECTED
+}
+
+enum RemoteType {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum SalaryPeriod {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+/// What kind of opportunity a Job row represents. All share the Job shape (title, org, location,
+/// deadline, apply link) — this is a tag, not a different schema. Extend by adding a case here AND
+/// to `src/config/categories.ts` (single source of truth the nav/filters/ingest all read from).
+enum OpportunityCategory {
+  JOB
+  INTERNSHIP
+  LEARNERSHIP
+  APPRENTICESHIP
+  GRADUATE_PROGRAMME
+  CALL_FOR_APPLICATIONS
+  FUNDING
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  domain    String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs Job[]
+
+  @@index([name])
+}
+
+model Job {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  title          String
+  companyId      String
+  company        Company        @relation(fields: [companyId], references: [id])
+  category       OpportunityCategory @default(JOB)
+  location       String
+  remoteType     RemoteType
+  employmentType EmploymentType
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String?        @default("USD")
+  salaryPeriod   SalaryPeriod?
+  /// Rewritten, brand-voice, post-ready description (phase 2 output).
+  description    String
+  highlights     String[]       @default([])
+  /// External apply URL — set unless isNative is true.
+  applyUrl       String?
+  isNative       Boolean        @default(false)
+  status         JobStatus      @default(DISCOVERED)
+  postedAt       DateTime?
+  closesAt       DateTime?
+  rawJobId       String?        @unique
+  rawJob         RawJob?        @relation(fields: [rawJobId], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tags            JobTag[]
+  savedBy         SavedJob[]
+  improvementRuns ImprovementRun[]
+
+  // The list query's primary access pattern: published jobs newest first.
+  @@index([status, postedAt])
+  @@index([status, category, postedAt])
+  @@index([companyId])
+  @@index([location])
+  // Upgraded to a pg_trgm GIN index on title/description in the initial migration
+  // (see prisma/migrations/*/migration.sql) — plain btree here documents intent.
+  @@index([title])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  jobs JobTag[]
+}
+
+model JobTag {
+  jobId String
+  tagId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tag   Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, tagId])
+  @@index([tagId])
+}
+
+// ---------------------------------------------------------------------------
+// Content — genuinely different shape from an opportunity: no deadline, no apply link.
+// ---------------------------------------------------------------------------
+
+/// Extend by adding a case here AND to `src/config/categories.ts`.
+enum ContentCategory {
+  HOW_TO
+  CAREER_DEVELOPMENT
+}
+
+model Article {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  title       String
+  category    ContentCategory
+  summary     String?
+  body        String
+  author      String?
+  source      String?
+  published   Boolean         @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([category, publishedAt])
+  @@index([published])
+}
+
+model Course {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  title         String
+  provider      String
+  description   String
+  /// Display string ("Free", "R1,200", "$49") — deliberately not a typed amount; providers quote
+  /// price in wildly inconsistent shapes and this is display-only, never filtered/summed.
+  priceLabel    String?
+  durationLabel String?
+  enrollUrl     String
+  published     Boolean   @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+}
+
+// ---------------------------------------------------------------------------
+// User data (Clerk-keyed, no local User table)
+// ---------------------------------------------------------------------------
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, jobId])
+  @@index([userId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  /// Serialized filter state: { q, location, remote, employmentType, salaryMin, tags, company, postedWithin }
+  query     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  alerts JobAlert[]
+
+  @@index([userId])
+}
+
+enum AlertFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+}
+
+model JobAlert {
+  id            String         @id @default(cuid())
+  userId        String
+  savedSearchId String?
+  savedSearch   SavedSearch?   @relation(fields: [savedSearchId], references: [id], onDelete: SetNull)
+  frequency     AlertFrequency @default(DAILY)
+  enabled       Boolean        @default(true)
+  lastSentAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId])
+}
