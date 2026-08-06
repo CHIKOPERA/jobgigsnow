@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { site } from "@/config";
+import { CategoryNav } from "./CategoryNav";
 
 export function Header() {
   return (
@@ -9,15 +10,13 @@ export function Header() {
         <Link href="/jobs" className="focus-ring rounded-sm text-title font-semibold">
           {site.name}
         </Link>
-        <nav className="ml-auto hidden items-center gap-6 text-body md:flex">
-          <Link href="/jobs" className="focus-ring rounded-sm text-ink-muted hover:text-ink">
-            Jobs
-          </Link>
-          <Link href="/saved" className="focus-ring rounded-sm text-ink-muted hover:text-ink">
-            Saved
-          </Link>
-        </nav>
-        <div className="ml-auto md:ml-0">
+        <Link
+          href="/saved"
+          className="focus-ring ml-auto rounded-sm text-body text-ink-muted hover:text-ink md:ml-0"
+        >
+          Saved
+        </Link>
+        <div>
           <Show
             when="signed-in"
             fallback={
@@ -35,6 +34,7 @@ export function Header() {
           </Show>
         </div>
       </div>
+      <CategoryNav />
     </header>
   );
 }

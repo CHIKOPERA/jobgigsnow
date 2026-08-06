@@ -25,6 +25,16 @@ test("location filters with a case-insensitive contains match", () => {
   assert.deepEqual(where.location, { contains: "Austin", mode: "insensitive" });
 });
 
+test("category filters on an exact OpportunityCategory match", () => {
+  const where = buildJobWhere(query({ category: "INTERNSHIP" }));
+  assert.equal(where.category, "INTERNSHIP");
+});
+
+test("no category filter when unset", () => {
+  const where = buildJobWhere(query());
+  assert.equal("category" in where, false);
+});
+
 test("remote filters on an exact remoteType match", () => {
   const where = buildJobWhere(query({ remote: "REMOTE" }));
   assert.equal(where.remoteType, "REMOTE");

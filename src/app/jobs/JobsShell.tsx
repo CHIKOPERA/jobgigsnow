@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { opportunityCategories } from "@/config/categories";
 import { SearchBar } from "@/components/filters/SearchBar";
 import { FilterChips } from "@/components/filters/FilterChips";
 import { JobList } from "@/components/job/JobList";
@@ -30,16 +31,28 @@ export async function JobsShell({ searchParams, activeSlug, detail }: JobsShellP
 
   const queryString = new URLSearchParams(flat).toString();
   const hasDetail = Boolean(detail);
+  const categoryLabel = query.category ? opportunityCategories[query.category].label : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
+      {categoryLabel && (
+        <h1 className="mb-3 text-title font-semibold" style={{ fontSize: "22px" }}>
+          {categoryLabel}
+        </h1>
+      )}
       <div className="flex flex-col gap-3">
         <SearchBar defaultValue={query.q} hiddenParams={flat} />
         <FilterChips facets={facets} />
       </div>
 
       <p aria-live="polite" className="mt-4 text-meta text-ink-muted">
-        {jobs.length === 0 ? "No jobs found" : `${jobs.length}${nextCursor ? "+" : ""} job${jobs.length === 1 ? "" : "s"} found`}
+        {categoryLabel
+          ? jobs.length === 0
+            ? `No matching ${categoryLabel.toLowerCase()} found`
+            : `${jobs.length}${nextCursor ? "+" : ""} matching ${categoryLabel.toLowerCase()} found`
+          : jobs.length === 0
+            ? "No jobs found"
+            : `${jobs.length}${nextCursor ? "+" : ""} job${jobs.length === 1 ? "" : "s"} found`}
       </p>
 
       <div className="mt-3 flex gap-6">
