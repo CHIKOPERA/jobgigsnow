@@ -79,3 +79,14 @@ export function formatClosedTime(iso: string | null): string {
   if (days === 1) return "Closed yesterday";
   return `Closed ${days} days ago`;
 }
+
+/** Null when there's no deadline, or the deadline has already passed — callers should only show
+ *  this chip on still-open jobs, and a passed closesAt on an open job means "no real deadline." */
+export function daysLeftLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return null;
+  if (days === 1) return "1 day left";
+  if (days <= 30) return `${days} days left`;
+  return null;
+}

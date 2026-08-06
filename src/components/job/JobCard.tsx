@@ -3,6 +3,7 @@ import { opportunityCategories } from "@/config/categories";
 import type { JobCardDto } from "@/lib/validation/job";
 import {
   accentTileClass,
+  daysLeftLabel,
   employmentLabel,
   formatClosedTime,
   formatSalary,
@@ -24,9 +25,12 @@ export function JobCard({ job, href, saved, active = false }: JobCardProps) {
 
   const chips = isClosed
     ? []
-    : [salary, remoteLabel(job.remoteType), employmentLabel(job.employmentType)].filter(
-        (c): c is string => Boolean(c),
-      );
+    : [
+        salary,
+        remoteLabel(job.remoteType),
+        employmentLabel(job.employmentType),
+        daysLeftLabel(job.closesAt),
+      ].filter((c): c is string => Boolean(c));
 
   return (
     <div className="relative">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SourceRowActions } from "@/components/admin/SourceRowActions";
 import { listSources } from "@/lib/ingest/source-service";
 
 export const metadata: Metadata = { title: "Admin — Sources" };
@@ -21,7 +22,7 @@ export default async function AdminSourcesPage() {
       </div>
 
       <div className="overflow-x-auto rounded-md border border-line">
-        <table className="w-full min-w-[640px] text-meta">
+        <table className="w-full min-w-[900px] text-meta">
           <thead>
             <tr className="border-b border-line bg-surface-sunk text-left text-label uppercase text-ink-muted">
               <th className="px-3 py-2">Name</th>
@@ -29,12 +30,13 @@ export default async function AdminSourcesPage() {
               <th className="px-3 py-2">Cadence</th>
               <th className="px-3 py-2">Enabled</th>
               <th className="px-3 py-2">Last run</th>
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sources.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-muted">
+                <td colSpan={6} className="px-3 py-6 text-center text-ink-muted">
                   No sources yet — create one to start crawling.
                 </td>
               </tr>
@@ -51,6 +53,9 @@ export default async function AdminSourcesPage() {
                 <td className="px-3 py-2">{source.enabled ? "Yes" : "No"}</td>
                 <td className="px-3 py-2 text-ink-muted">
                   {source.lastRunAt ? new Date(source.lastRunAt).toLocaleString() : "Never"}
+                </td>
+                <td className="px-3 py-2">
+                  <SourceRowActions sourceId={source.id} sourceName={source.name} initiallyEnabled={source.enabled} />
                 </td>
               </tr>
             ))}

@@ -1,6 +1,7 @@
 import type { JobDetailDto } from "@/lib/validation/job";
 import {
   accentTileClass,
+  daysLeftLabel,
   employmentLabel,
   formatRelativeTime,
   formatSalary,
@@ -54,6 +55,11 @@ export function JobDetail({ job, saved }: JobDetailProps) {
         <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
           {employmentLabel(job.employmentType)}
         </span>
+        {!isClosed && daysLeftLabel(job.closesAt) && (
+          <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
+            {daysLeftLabel(job.closesAt)}
+          </span>
+        )}
         {job.isNew && !isClosed && (
           <span className="rounded-pill bg-accent-orchid px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
             New
