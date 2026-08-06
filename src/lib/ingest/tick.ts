@@ -163,7 +163,10 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
     }
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
   } catch (err) {
-    await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FAILED" } });
+    await prisma.rawJob.update({
+      where: { id: row.id },
+      data: { fetchStatus: "FAILED", needsAggregation: false, aggregationClaimedAt: null },
+    });
     if (row.ingestRunId) {
       await maybeIncrementCounters(row.ingestRunId, { failedCount: 1 });
       await recordFailure({
@@ -303,6 +306,29 @@ async function drainAggregation(): Promise<number> {
     await processAggregation(row);
   }
   return candidates.length;
+}
+
+/** Processes one explicitly queued detail URL immediately. The durable RawJob/IngestRun rows are
+ * created before this runs, so a terminated background task is still picked up by the next cron
+ * tick. This is used by the admin one-off crawler. */
+export async function processQueuedRawJob(rawJobId: string): Promise<void> {
+  const acquisition = await prisma.rawJob.findUnique({
+    where: { id: rawJobId },
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, fetchStatus: true },
+  });
+  if (!acquisition) return;
+
+  if (acquisition.fetchStatus !== "FETCHED") {
+    await processAcquisition(acquisition);
+  }
+
+  const aggregation = await prisma.rawJob.findUnique({
+    where: { id: rawJobId },
+    select: { id: true, externalUrl: true, ingestRunId: true, payload: true, fetchStatus: true, needsAggregation: true },
+  });
+  if (aggregation?.fetchStatus === "FETCHED" && aggregation.needsAggregation) {
+    await processAggregation(aggregation);
+  }
 }
 
 // ---------------------------------------------------------------------------

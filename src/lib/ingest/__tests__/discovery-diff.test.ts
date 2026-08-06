@@ -3,10 +3,18 @@ import assert from "node:assert/strict";
 import { diffDiscoveredUrls, extractListingLinks, findNextPageUrl } from "../discovery-diff";
 import type { CrawlConfig } from "@/lib/validation/source";
 
+type HtmlCrawlConfig = Extract<CrawlConfig, { provider: "html" }>;
+
 const LISTING_URL = "https://example.com/careers";
 
-function config(overrides: Partial<CrawlConfig> = {}): CrawlConfig {
-  return { listingUrls: [LISTING_URL], linkSelector: "a.job-link", linkAttr: "href", ...overrides };
+function config(overrides: Partial<HtmlCrawlConfig> = {}): HtmlCrawlConfig {
+  return {
+    provider: "html",
+    listingUrls: [LISTING_URL],
+    linkSelector: "a.job-link",
+    linkAttr: "href",
+    ...overrides,
+  };
 }
 
 test("extractListingLinks resolves relative hrefs to absolute URLs and dedupes", () => {

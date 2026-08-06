@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Hirelane design tokens — source of truth: design_handoff_job_board_ui/tokens.json */
+/* JobGigsNow design tokens — source of truth: design_handoff_job_board_ui/tokens.json */
 @theme {
   --color-bg: #e9eade;
   --color-surface: #fbfbf5;
@@ -94,4 +94,77 @@ body {
 .focus-ring:focus-visible {
   border-color: var(--color-ink);
   box-shadow: var(--ring);
+}
+
+.tiptap-editor > :first-child,
+.job-rich-text > :first-child {
+  margin-top: 0;
+}
+
+.tiptap-editor > :last-child,
+.job-rich-text > :last-child {
+  margin-bottom: 0;
+}
+
+.tiptap-editor p,
+.job-rich-text p {
+  margin-block: 0.85rem;
+}
+
+.tiptap-editor h2,
+.job-rich-text h2,
+.tiptap-editor h3,
+.job-rich-text h3 {
+  margin-top: 1.6rem;
+  margin-bottom: 0.55rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.tiptap-editor h2,
+.job-rich-text h2 {
+  font-size: 1.25rem;
+}
+
+.tiptap-editor h3,
+.job-rich-text h3 {
+  font-size: 1.05rem;
+}
+
+.tiptap-editor ul,
+.job-rich-text ul,
+.tiptap-editor ol,
+.job-rich-text ol {
+  margin-block: 0.85rem;
+  padding-left: 1.4rem;
+}
+
+.tiptap-editor ul,
+.job-rich-text ul {
+  list-style: disc;
+}
+
+.tiptap-editor ol,
+.job-rich-text ol {
+  list-style: decimal;
+}
+
+.tiptap-editor li,
+.job-rich-text li {
+  margin-block: 0.35rem;
+}
+
+.tiptap-editor blockquote,
+.job-rich-text blockquote {
+  margin-block: 1rem;
+  border-left: 3px solid var(--color-accent-mint);
+  padding-left: 1rem;
+  color: var(--color-ink-muted);
+}
+
+.tiptap-editor a,
+.job-rich-text a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

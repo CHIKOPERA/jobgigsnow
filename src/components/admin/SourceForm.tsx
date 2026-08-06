@@ -5,6 +5,7 @@ import { useState } from "react";
 
 const CRAWL_CONFIG_TEMPLATE = JSON.stringify(
   {
+    provider: "html",
     listingUrls: ["https://example.com/careers"],
     linkSelector: "a.job-link",
     linkAttr: "href",

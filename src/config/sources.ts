@@ -3,7 +3,7 @@ import "server-only";
 export const sources = {
   defaultCrawlCadenceMinutes: 360,
   defaultFetchTimeoutMs: 15_000,
-  defaultUserAgent: "HirelaneBot/1.0 (+https://hirelane.example/bot)",
+  defaultUserAgent: "JobGigsNowBot/1.0 (+https://jobgigsnow.example/bot)",
 
   // Raw HTML stored in RawJob.payload is truncated past this size (bytes) so bundle rows stay
   // bounded; payload.htmlTruncated is set to true when this happens.

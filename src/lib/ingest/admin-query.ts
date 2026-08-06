@@ -44,7 +44,7 @@ export async function getRunDetail(id: string) {
   });
   if (!run) return null;
 
-  const [rawJobs, failures] = await Promise.all([
+  const [rawJobs, failures, rawTotal, fetched, fetchFailed, aggregationComplete, reviewReady, published] = await Promise.all([
     prisma.rawJob.findMany({
       where: { ingestRunId: id },
       orderBy: { updatedAt: "desc" },
@@ -66,9 +66,28 @@ export async function getRunDetail(id: string) {
       take: 100,
       select: { id: true, stage: true, url: true, message: true, createdAt: true, rawJobId: true },
     }),
+    prisma.rawJob.count({ where: { ingestRunId: id } }),
+    prisma.rawJob.count({ where: { ingestRunId: id, fetchStatus: "FETCHED" } }),
+    prisma.rawJob.count({ where: { ingestRunId: id, fetchStatus: "FAILED" } }),
+    prisma.rawJob.count({ where: { ingestRunId: id, fetchStatus: "FETCHED", needsAggregation: false } }),
+    prisma.rawJob.count({ where: { ingestRunId: id, job: { status: "READY" } } }),
+    prisma.rawJob.count({ where: { ingestRunId: id, job: { status: "PUBLISHED" } } }),
   ]);
 
-  return { run, rawJobs, failures };
+  return {
+    run,
+    rawJobs,
+    failures,
+    progress: {
+      rawTotal,
+      acquisitionComplete: fetched + fetchFailed,
+      acquisitionFailed: fetchFailed,
+      aggregationTotal: fetched,
+      aggregationComplete,
+      reviewReady,
+      published,
+    },
+  };
 }
 
 export async function getRawJobDetail(id: string) {
@@ -180,6 +199,55 @@ export async function getDashboardStats() {
     recentRuns,
     recentFailures,
   };
+}
+
+export async function listReviewJobs() {
+  const [pending, recentlyPublished] = await Promise.all([
+    prisma.job.findMany({
+      where: { status: { in: ["READY", "IMPROVING"] } },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        location: true,
+        updatedAt: true,
+        company: { select: { name: true } },
+        rawJob: { select: { source: { select: { name: true } } } },
+      },
+    }),
+    prisma.job.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { updatedAt: "desc" },
+      take: 12,
+      select: { id: true, slug: true, title: true, updatedAt: true, company: { select: { name: true } } },
+    }),
+  ]);
+  return { pending, recentlyPublished };
+}
+
+export async function getReviewJob(id: string) {
+  return prisma.job.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      status: true,
+      category: true,
+      location: true,
+      remoteType: true,
+      employmentType: true,
+      description: true,
+      highlights: true,
+      applyUrl: true,
+      rewritePrompt: true,
+      updatedAt: true,
+      company: { select: { name: true } },
+      rawJob: { select: { id: true, externalUrl: true, source: { select: { name: true } } } },
+    },
+  });
 }
 
 export type ReprocessOutcome = "requeued_fetch" | "requeued_aggregation" | "not_found";

@@ -5,8 +5,10 @@
 import { load } from "cheerio";
 import type { CrawlConfig } from "@/lib/validation/source";
 
+type HtmlCrawlConfig = Extract<CrawlConfig, { provider: "html" }>;
+
 /** CSS-selector link extraction off a listing page. */
-export function extractListingLinks(html: string, pageUrl: string, config: CrawlConfig): string[] {
+export function extractListingLinks(html: string, pageUrl: string, config: HtmlCrawlConfig): string[] {
   const $ = load(html);
   const links = new Set<string>();
 

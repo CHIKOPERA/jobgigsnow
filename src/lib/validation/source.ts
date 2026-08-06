@@ -5,7 +5,21 @@ import { z } from "zod";
  * extractors/selectors.ts read it), not enforced by the DB (it's stored as Json). Validating it
  * here just gives the admin "New Source" form useful errors instead of a silent bad crawl later.
  */
-export const crawlConfigSchema = z.object({
+const detailSelectorsSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    company: z.string().min(1).optional(),
+    location: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    applyUrl: z.string().min(1).optional(),
+    postedAt: z.string().min(1).optional(),
+    salary: z.string().min(1).optional(),
+  })
+  .optional();
+
+const htmlCrawlConfigSchema = z.object({
+  // Optional/defaulted for backward compatibility with sources created before providers existed.
+  provider: z.literal("html").default("html"),
   // One or more listing pages to discover job-detail links from.
   listingUrls: z.array(z.string().min(1)).min(1),
   // CSS selector (cheerio) matching each job-detail link on a listing page.
@@ -19,20 +33,20 @@ export const crawlConfigSchema = z.object({
       maxPages: z.number().int().positive().max(50).default(10),
     })
     .optional(),
-  // Source-specific CSS selectors for the detail page — the "selectors" tier in the extraction
-  // preference order (JSON-LD > selectors > general HTML > Readability/Markdown > AI inference).
-  detailSelectors: z
-    .object({
-      title: z.string().min(1).optional(),
-      company: z.string().min(1).optional(),
-      location: z.string().min(1).optional(),
-      description: z.string().min(1).optional(),
-      applyUrl: z.string().min(1).optional(),
-      postedAt: z.string().min(1).optional(),
-      salary: z.string().min(1).optional(),
-    })
-    .optional(),
+  detailSelectors: detailSelectorsSchema,
 });
+
+const smartRecruitersCrawlConfigSchema = z.object({
+  provider: z.literal("smartrecruiters"),
+  companyIdentifier: z.string().min(1),
+  pageSize: z.number().int().positive().max(100).default(100),
+  maxPages: z.number().int().positive().max(50).default(10),
+  detailSelectors: detailSelectorsSchema,
+});
+
+// Source-specific selectors are the "selectors" tier in the extraction preference order
+// (JSON-LD > selectors > general HTML > Readability/Markdown > AI inference).
+export const crawlConfigSchema = z.union([smartRecruitersCrawlConfigSchema, htmlCrawlConfigSchema]);
 export type CrawlConfig = z.infer<typeof crawlConfigSchema>;
 
 export const createSourceSchema = z.object({

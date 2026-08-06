@@ -52,12 +52,17 @@ function readField($: CheerioAPI, selector: string, field: SelectorField, pageUr
 
   if (field === "applyUrl") return resolveUrl(el.attr("href"), pageUrl);
   if (field === "postedAt") {
-    const datetime = el.attr("datetime");
-    if (datetime) return datetime;
+    const dateValue = el.attr("datetime") ?? el.attr("content");
+    if (dateValue) return dateValue.trim();
   }
 
   const text = el.text().trim();
-  return text.length > 0 ? text : undefined;
+  if (text.length > 0) return text;
+
+  // Microdata commonly stores values in meta/content or custom-element attributes rather than
+  // text nodes (SmartRecruiters uses both forms for company and formatted location).
+  const attributeValue = el.attr("content") ?? el.attr("formattedAddress");
+  return attributeValue?.trim() || undefined;
 }
 
 /**

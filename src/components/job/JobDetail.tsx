@@ -9,6 +9,7 @@ import {
 } from "@/lib/format";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { SaveButton } from "./SaveButton";
+import { descriptionContainsHtml, sanitizeJobDescription } from "@/lib/job-rich-text";
 
 interface JobDetailProps {
   job: JobDetailDto;
@@ -18,6 +19,7 @@ interface JobDetailProps {
 export function JobDetail({ job, saved }: JobDetailProps) {
   const isClosed = job.status !== "PUBLISHED";
   const salary = formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryPeriod);
+  const richDescription = descriptionContainsHtml(job.description) ? sanitizeJobDescription(job.description) : null;
 
   return (
     <article className="rounded-md border border-line bg-surface p-6">
@@ -76,7 +78,11 @@ export function JobDetail({ job, saved }: JobDetailProps) {
         </ul>
       )}
 
-      <div className="mt-6 whitespace-pre-line text-body leading-relaxed">{job.description}</div>
+      {richDescription ? (
+        <div className="job-rich-text mt-6 text-body leading-relaxed" dangerouslySetInnerHTML={{ __html: richDescription }} />
+      ) : (
+        <div className="mt-6 whitespace-pre-line text-body leading-relaxed">{job.description}</div>
+      )}
 
       {job.tags.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-1.5">

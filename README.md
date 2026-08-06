@@ -1,4 +1,4 @@
-# Hirelane (jobgigsnow) — Phase 1
+# JobGigsNow — Phase 1
 
 A job board web app. This is **Phase 1 — Posting**: the public-facing job board (browse, search,
 filter, job detail, saved jobs), reading from a schema shaped so phase-2 crawler/rewriter workers

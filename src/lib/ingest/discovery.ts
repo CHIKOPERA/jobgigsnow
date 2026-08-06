@@ -6,6 +6,7 @@ import type { CrawlConfig } from "@/lib/validation/source";
 import { diffDiscoveredUrls, extractListingLinks, findNextPageUrl } from "./discovery-diff";
 import { isAllowedByRobots } from "./robots";
 import { failRun, finalizeRunIfComplete, incrementRunCounters, recordFailure, startIngestRun } from "./run-tracking";
+import { buildSmartRecruitersPageUrl, parseSmartRecruitersPage } from "./smartrecruiters";
 
 async function fetchListingPage(url: string): Promise<string> {
   if (!(await isAllowedByRobots(url))) {
@@ -19,10 +20,22 @@ async function fetchListingPage(url: string): Promise<string> {
   return res.text();
 }
 
+async function fetchSmartRecruitersPage(url: string): Promise<unknown> {
+  if (!(await isAllowedByRobots(url))) {
+    throw new Error(`Disallowed by robots.txt: ${url}`);
+  }
+  const res = await fetch(url, {
+    headers: { accept: "application/json", "user-agent": sourcesConfig.defaultUserAgent },
+    signal: AbortSignal.timeout(sourcesConfig.defaultFetchTimeoutMs),
+  });
+  if (!res.ok) throw new Error(`SmartRecruiters returned HTTP ${res.status}`);
+  return res.json();
+}
+
 /** Crawls every listingUrl (+ pagination) for one source, tolerating a bad listing URL among
  *  several — only fails the whole discovery pass if every listingUrl fails. */
 async function crawlAllListings(
-  config: CrawlConfig,
+  config: Extract<CrawlConfig, { provider: "html" }>,
   onListingError: (url: string, message: string) => void,
 ): Promise<string[]> {
   const allLinks = new Set<string>();
@@ -55,6 +68,41 @@ async function crawlAllListings(
   return [...allLinks];
 }
 
+async function crawlSmartRecruiters(
+  config: Extract<CrawlConfig, { provider: "smartrecruiters" }>,
+  onListingError: (url: string, message: string) => void,
+): Promise<string[]> {
+  const links = new Set<string>();
+  let offset = 0;
+
+  for (let page = 0; page < config.maxPages; page++) {
+    const endpoint = buildSmartRecruitersPageUrl(config.companyIdentifier, config.pageSize, offset);
+    try {
+      const parsed = parseSmartRecruitersPage(await fetchSmartRecruitersPage(endpoint));
+      for (const posting of parsed.postings) links.add(posting.postingUrl);
+
+      offset += parsed.postings.length;
+      if (parsed.postings.length === 0 || offset >= parsed.totalFound || parsed.postings.length < config.pageSize) {
+        break;
+      }
+    } catch (err) {
+      onListingError(endpoint, err instanceof Error ? err.message : String(err));
+      throw new Error("SmartRecruiters discovery failed for this source.");
+    }
+  }
+
+  return [...links];
+}
+
+async function discoverLiveUrls(
+  config: CrawlConfig,
+  onListingError: (url: string, message: string) => void,
+): Promise<string[]> {
+  return config.provider === "smartrecruiters"
+    ? crawlSmartRecruiters(config, onListingError)
+    : crawlAllListings(config, onListingError);
+}
+
 /**
  * Runs one discovery cycle for a source: finds live job-detail URLs, upserts RawJob shells for
  * new/resurfacing ones, tracks missing/inactive transitions, and produces an IngestRun. Actual
@@ -71,7 +119,16 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
 
   try {
     const listingErrors: { url: string; message: string }[] = [];
-    const liveUrlsRaw = await crawlAllListings(config, (url, message) => listingErrors.push({ url, message }));
+    let liveUrlsRaw: string[];
+    try {
+      liveUrlsRaw = await discoverLiveUrls(config, (url, message) => listingErrors.push({ url, message }));
+    } catch (err) {
+      // Preserve the actionable endpoint-level error before the outer catch records the summary.
+      for (const { url, message } of listingErrors) {
+        await recordFailure({ ingestRunId: run.id, stage: "DISCOVERY", url, message });
+      }
+      throw err;
+    }
     const liveUrls = liveUrlsRaw.slice(0, sourcesConfig.maxPagesPerRun);
 
     for (const { url, message } of listingErrors) {

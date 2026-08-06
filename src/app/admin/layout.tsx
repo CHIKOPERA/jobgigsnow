@@ -36,9 +36,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen w-full bg-bg">
       <AdminNav />
-      <main className="mx-auto max-w-6xl px-4 py-6 md:px-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-10">{children}</main>
     </div>
   );
 }

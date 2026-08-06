@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Schibsted_Grotesk } from "next/font/google";
-import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { site } from "@/config";
+import { SiteShell } from "@/components/nav/SiteShell";
 import { Header } from "@/components/nav/Header";
 import { TabBar } from "@/components/nav/TabBar";
 import "./globals.css";
@@ -25,15 +25,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <ClerkProvider>
       <html lang="en" className={`${schibstedGrotesk.variable} h-full antialiased`}>
         <body className="min-h-full flex flex-col bg-bg text-ink font-sans text-body">
-          <Header />
-          <main className="flex-1 pb-16 md:pb-0">{children}</main>
-          <TabBar />
-          <Script
-            async
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4285411663423178"
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-          />
+          <SiteShell header={<Header />} tabBar={<TabBar />}>
+            {children}
+          </SiteShell>
         </body>
       </html>
     </ClerkProvider>

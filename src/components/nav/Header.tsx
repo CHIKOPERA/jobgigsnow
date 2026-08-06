@@ -17,7 +17,7 @@ export function Header() {
             className="grid size-8 place-items-center rounded-[10px] bg-ink text-[13px] font-semibold text-surface transition-transform group-hover:-rotate-3"
             style={{ transitionDuration: "var(--dur-state)" }}
           >
-            H
+            J
           </span>
           <span className="text-[20px] font-semibold tracking-[-0.025em]">{site.name}</span>
         </Link>

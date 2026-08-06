@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getRunDetail } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
 import { StatTile } from "@/components/admin/StatTile";
+import { RunProgress } from "@/components/admin/RunProgress";
 
 export const metadata: Metadata = { title: "Admin — Run detail" };
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
   const detail = await getRunDetail(id);
   if (!detail) notFound();
 
-  const { run, rawJobs, failures } = detail;
+  const { run, rawJobs, failures, progress } = detail;
 
   return (
     <div className="flex flex-col gap-8">
@@ -31,6 +32,15 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
         Started {new Date(run.startedAt).toLocaleString()}
         {run.finishedAt && ` · Finished ${new Date(run.finishedAt).toLocaleString()}`}
       </p>
+
+      <RunProgress
+        runId={run.id}
+        initial={{
+          status: run.status,
+          discoveredCount: run.discoveredCount,
+          progress,
+        }}
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Discovered" value={run.discoveredCount} />
@@ -77,8 +87,8 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
                   <td className="px-3 py-2">{rawJob.needsAggregation ? "Yes" : "No"}</td>
                   <td className="px-3 py-2">
                     {rawJob.job ? (
-                      <Link href={`/jobs/${rawJob.job.slug}`} className="focus-ring rounded-sm text-ink-muted hover:text-ink">
-                        {rawJob.job.status}
+                      <Link href={`/admin/review/${rawJob.job.id}`} className="focus-ring rounded-sm text-ink-muted hover:text-ink">
+                        {rawJob.job.status} →
                       </Link>
                     ) : (
                       <span className="text-ink-muted">—</span>

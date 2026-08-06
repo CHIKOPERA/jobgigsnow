@@ -1,4 +1,4 @@
-// Hirelane job board — data model.
+// JobGigsNow job board — data model.
 // Covers all three pipeline stages (sourcing, improving, posting); Phase 1 UI reads only
 // Job rows with status = PUBLISHED. See docs/todo/01-data-model.md and 06-phase-2-handoff.md.
 
@@ -274,6 +274,8 @@ model Job {
   salaryPeriod   SalaryPeriod?
   /// Rewritten, brand-voice, post-ready description (phase 2 output).
   description    String
+  /// Last admin instruction used for the optional AI rewrite on the review screen.
+  rewritePrompt  String?
   highlights     String[]       @default([])
   /// External apply URL — set unless isNative is true.
   applyUrl       String?
