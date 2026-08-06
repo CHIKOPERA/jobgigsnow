@@ -7,6 +7,9 @@ import { diffDiscoveredUrls, extractListingLinks, findNextPageUrl } from "./disc
 import { isAllowedByRobots } from "./robots";
 import { failRun, finalizeRunIfComplete, incrementRunCounters, recordFailure, startIngestRun } from "./run-tracking";
 import { buildSmartRecruitersPageUrl, parseSmartRecruitersPage } from "./smartrecruiters";
+import { discoverCornerstone } from "./cornerstone";
+import { discoverOracle } from "./oracle";
+import { discoverWorkday } from "./workday";
 
 async function fetchListingPage(url: string): Promise<string> {
   if (!(await isAllowedByRobots(url))) {
@@ -30,6 +33,18 @@ async function fetchSmartRecruitersPage(url: string): Promise<unknown> {
   });
   if (!res.ok) throw new Error(`SmartRecruiters returned HTTP ${res.status}`);
   return res.json();
+}
+
+async function fetchAts(url: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const resolvedUrl = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+  if (!(await isAllowedByRobots(resolvedUrl))) throw new Error(`Disallowed by robots.txt: ${resolvedUrl}`);
+  const headers = new Headers(init?.headers);
+  if (!headers.has("user-agent")) headers.set("user-agent", sourcesConfig.defaultUserAgent);
+  return fetch(url, {
+    ...init,
+    headers,
+    signal: init?.signal ?? AbortSignal.timeout(sourcesConfig.defaultFetchTimeoutMs),
+  });
 }
 
 /** Crawls every listingUrl (+ pagination) for one source, tolerating a bad listing URL among
@@ -98,9 +113,18 @@ async function discoverLiveUrls(
   config: CrawlConfig,
   onListingError: (url: string, message: string) => void,
 ): Promise<string[]> {
-  return config.provider === "smartrecruiters"
-    ? crawlSmartRecruiters(config, onListingError)
-    : crawlAllListings(config, onListingError);
+  switch (config.provider) {
+    case "smartrecruiters":
+      return crawlSmartRecruiters(config, onListingError);
+    case "workday":
+      return discoverWorkday(config, fetchAts);
+    case "oracle":
+      return discoverOracle(config, fetchAts);
+    case "cornerstone":
+      return discoverCornerstone(config, fetchAts);
+    case "html":
+      return crawlAllListings(config, onListingError);
+  }
 }
 
 /**

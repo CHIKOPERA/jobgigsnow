@@ -13,8 +13,14 @@ export function extractListingLinks(html: string, pageUrl: string, config: HtmlC
   const links = new Set<string>();
 
   $(config.linkSelector).each((_, el) => {
-    const href = $(el).attr(config.linkAttr ?? "href");
-    if (!href) return;
+    const rawValue = $(el).attr(config.linkAttr ?? "href");
+    if (!rawValue) return;
+    let href = rawValue.trim();
+    if (config.linkRegex) {
+      const match = rawValue.match(new RegExp(config.linkRegex));
+      if (!match) return;
+      href = (match[1] ?? match[0]).trim();
+    }
     try {
       links.add(new URL(href, pageUrl).toString());
     } catch {

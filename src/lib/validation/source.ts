@@ -26,6 +26,9 @@ const htmlCrawlConfigSchema = z.object({
   linkSelector: z.string().min(1),
   // Attribute the detail URL is read from — usually "href".
   linkAttr: z.string().min(1).default("href"),
+  // Some older career sites put a detail URL inside an onclick/data attribute. When present,
+  // the first capture group is used as the URL (or the whole match when there is no group).
+  linkRegex: z.string().min(1).optional(),
   // Optional "next page" link selector + a hard cap, so a bad selector can't paginate forever.
   pagination: z
     .object({
@@ -44,9 +47,47 @@ const smartRecruitersCrawlConfigSchema = z.object({
   detailSelectors: detailSelectorsSchema,
 });
 
+const workdayCrawlConfigSchema = z.object({
+  provider: z.literal("workday"),
+  host: z.string().min(1),
+  tenant: z.string().min(1),
+  site: z.string().min(1),
+  pageSize: z.number().int().positive().max(100).default(100),
+  maxPages: z.number().int().positive().max(50).default(10),
+  detailSelectors: detailSelectorsSchema,
+});
+
+const oracleCrawlConfigSchema = z.object({
+  provider: z.literal("oracle"),
+  host: z.string().min(1),
+  siteNumber: z.string().min(1),
+  companyName: z.string().min(1),
+  language: z.string().min(1).default("en"),
+  pageSize: z.number().int().positive().max(100).default(100),
+  maxPages: z.number().int().positive().max(50).default(10),
+  detailSelectors: detailSelectorsSchema,
+});
+
+const cornerstoneCrawlConfigSchema = z.object({
+  provider: z.literal("cornerstone"),
+  host: z.string().min(1),
+  corp: z.string().min(1),
+  siteId: z.string().min(1),
+  companyName: z.string().min(1),
+  pageSize: z.number().int().positive().max(100).default(100),
+  maxPages: z.number().int().positive().max(50).default(10),
+  detailSelectors: detailSelectorsSchema,
+});
+
 // Source-specific selectors are the "selectors" tier in the extraction preference order
 // (JSON-LD > selectors > general HTML > Readability/Markdown > AI inference).
-export const crawlConfigSchema = z.union([smartRecruitersCrawlConfigSchema, htmlCrawlConfigSchema]);
+export const crawlConfigSchema = z.union([
+  workdayCrawlConfigSchema,
+  oracleCrawlConfigSchema,
+  cornerstoneCrawlConfigSchema,
+  smartRecruitersCrawlConfigSchema,
+  htmlCrawlConfigSchema,
+]);
 export type CrawlConfig = z.infer<typeof crawlConfigSchema>;
 
 export const createSourceSchema = z.object({

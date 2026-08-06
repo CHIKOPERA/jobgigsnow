@@ -39,6 +39,20 @@ test("extractListingLinks reads a custom linkAttr when configured", () => {
   assert.deepEqual(links, ["https://example.com/jobs/9"]);
 });
 
+test("extractListingLinks can capture a URL embedded in an onclick attribute", () => {
+  const html = `<table><tr class="job" onclick="javascript:window.location='/jobs/42';"><td>Job</td></tr></table>`;
+  const links = extractListingLinks(
+    html,
+    LISTING_URL,
+    config({
+      linkSelector: "tr.job[onclick]",
+      linkAttr: "onclick",
+      linkRegex: "window\\.location=['\\\"]([^'\\\"]+)",
+    }),
+  );
+  assert.deepEqual(links, ["https://example.com/jobs/42"]);
+});
+
 test("extractListingLinks skips elements with no href without throwing", () => {
   const html = `<a class="job-link">No href here</a>`;
   assert.doesNotThrow(() => extractListingLinks(html, LISTING_URL, config()));

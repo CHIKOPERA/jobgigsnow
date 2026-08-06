@@ -108,7 +108,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
     const source = await prisma.source.findUnique({ where: { id: row.sourceId }, select: { crawlConfig: true } });
     const config = source?.crawlConfig as unknown as CrawlConfig | undefined;
 
-    const acquired = await acquirePage(row.externalUrl);
+    const acquired = await acquirePage(row.externalUrl, config);
     const html = acquired.html;
 
     const jsonLdPostings = extractJsonLd(html);
