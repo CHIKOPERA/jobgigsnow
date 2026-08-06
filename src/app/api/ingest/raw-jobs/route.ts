@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import { upsertRawJobsForSource } from "@/lib/ingest/raw-job-service";
 import { isAuthorizedIngestRequest } from "@/lib/ingest-auth";
 import { prisma } from "@/lib/prisma";
 import { errorResponse } from "@/lib/validation/common";
@@ -21,34 +21,7 @@ export async function POST(request: Request) {
     return errorResponse("NOT_FOUND", `Source ${sourceId} does not exist.`, 404);
   }
 
-  const results = await prisma.$transaction(
-    jobs.map((job) =>
-      prisma.rawJob.upsert({
-        where: { sourceId_externalId: { sourceId, externalId: job.externalId } },
-        create: {
-          sourceId,
-          externalId: job.externalId,
-          externalUrl: job.externalUrl,
-          rawTitle: job.rawTitle ?? null,
-          rawCompany: job.rawCompany ?? null,
-          rawLocation: job.rawLocation ?? null,
-          payload: job.payload as Prisma.InputJsonValue,
-          contentHash: job.contentHash,
-          fetchStatus: job.fetchStatus,
-        },
-        update: {
-          externalUrl: job.externalUrl,
-          rawTitle: job.rawTitle ?? null,
-          rawCompany: job.rawCompany ?? null,
-          rawLocation: job.rawLocation ?? null,
-          payload: job.payload as Prisma.InputJsonValue,
-          contentHash: job.contentHash,
-          fetchStatus: job.fetchStatus,
-        },
-        select: { id: true, externalId: true },
-      }),
-    ),
-  );
+  const results = await upsertRawJobsForSource(sourceId, jobs);
 
   return Response.json({ upserted: results.length, ids: results.map((r) => r.id) }, { status: 200 });
 }

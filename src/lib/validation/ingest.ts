@@ -19,6 +19,8 @@ export const rawJobInputSchema = z.object({
   fetchStatus: z.enum(["PENDING", "FETCHED", "FAILED"]).default("FETCHED"),
 });
 
+export type RawJobInput = z.infer<typeof rawJobInputSchema>;
+
 export const ingestRawJobsSchema = z.object({
   sourceId: z.string().min(1),
   jobs: z.array(rawJobInputSchema).min(1).max(ingest.rawJobsBatchMax),

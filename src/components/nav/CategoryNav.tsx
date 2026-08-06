@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { navItems } from "@/config/categories";
+import { navItems, type NavItem } from "@/config/categories";
+
+const opportunityNavItems = navItems.filter(
+  (item): item is Extract<NavItem, { kind: "opportunity" }> =>
+    item.kind === "opportunity" && item.category.value !== "JOB",
+);
 
 export function CategoryNav() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -26,77 +31,89 @@ export function CategoryNav() {
   }, []);
 
   return (
-    <nav aria-label="Browse by category" className="bg-ink" ref={containerRef}>
-      <ul className="mx-auto flex max-w-6xl flex-wrap px-2 md:px-4">
-        {navItems.map((item, index) => {
-          const subcategories = item.kind === "opportunity" ? item.category.subcategories : undefined;
-          const isOpen = openIndex === index;
+    <nav aria-label="Browse opportunities" className="border-t border-line/70 bg-bg/70" ref={containerRef}>
+      <div className="mx-auto flex max-w-6xl items-center px-4 md:px-6">
+        <span className="mr-3 hidden shrink-0 items-center gap-3 text-label uppercase text-ink-muted lg:flex">
+          Opportunities
+          <span aria-hidden="true" className="h-4 w-px bg-line-strong" />
+        </span>
+        <ul className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:overflow-visible">
+          {opportunityNavItems.map((item, index) => {
+            const subcategories = item.category.subcategories;
+            const isOpen = openIndex === index;
 
-          if (!subcategories || subcategories.length === 0) {
+            if (!subcategories || subcategories.length === 0) {
+              return (
+                <li key={item.href} className="shrink-0">
+                  <Link
+                    href={item.href}
+                    className="focus-ring flex min-h-10 items-center rounded-pill px-3 text-meta font-medium text-ink-muted transition-colors hover:bg-accent-mint hover:text-ink"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            }
+
             return (
-              <li key={item.href}>
+              <li key={item.href} className="relative shrink-0">
                 <Link
                   href={item.href}
-                  className="focus-ring flex min-h-(--hit-min) items-center px-3 text-meta text-[#DCDED2] hover:text-[#F6F7F0]"
+                  className="focus-ring flex min-h-10 items-center rounded-pill px-3 text-meta font-medium text-ink-muted hover:bg-accent-mint hover:text-ink md:hidden"
                 >
                   {item.label}
                 </Link>
-              </li>
-            );
-          }
-
-          return (
-            <li key={item.href} className="relative">
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                aria-haspopup="menu"
-                onClick={() => setOpenIndex(isOpen ? null : index)}
-                className="focus-ring flex min-h-(--hit-min) items-center gap-1.5 px-3 text-meta text-[#DCDED2] hover:text-[#F6F7F0]"
-              >
-                {item.label}
-                <span
-                  aria-hidden="true"
-                  className="text-[10px] transition-transform"
-                  style={{
-                    transform: isOpen ? "rotate(180deg)" : "none",
-                    transitionDuration: "var(--dur-state)",
-                  }}
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setOpenIndex(isOpen ? null : index)}
+                  className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-pill px-3 text-meta font-medium text-ink-muted hover:bg-accent-mint hover:text-ink md:flex"
                 >
-                  ▾
-                </span>
-              </button>
-              {isOpen && (
-                <div
-                  role="menu"
-                  className="absolute left-0 top-full z-30 min-w-56 border border-white/10 bg-ink py-1.5 shadow-lg"
-                >
-                  <Link
-                    href={item.href}
-                    role="menuitem"
-                    onClick={() => setOpenIndex(null)}
-                    className="focus-ring block min-h-(--hit-min) px-4 py-2.5 text-meta text-[#F6F7F0] hover:bg-white/10"
+                  {item.label}
+                  <span
+                    aria-hidden="true"
+                    className="text-[9px] transition-transform"
+                    style={{
+                      transform: isOpen ? "rotate(180deg)" : "none",
+                      transitionDuration: "var(--dur-state)",
+                    }}
                   >
-                    All {item.label}
-                  </Link>
-                  <div className="mx-3 my-1 border-t border-white/10" aria-hidden="true" />
-                  {subcategories.map((sub) => (
+                    ▾
+                  </span>
+                </button>
+                {isOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-[calc(100%+4px)] z-30 hidden min-w-56 rounded-md border border-line bg-surface p-1.5 shadow-[0_16px_40px_rgb(20_21_15/0.14)] md:block"
+                  >
                     <Link
-                      key={sub.tagSlug}
-                      href={`${item.href}&tags=${sub.tagSlug}`}
+                      href={item.href}
                       role="menuitem"
                       onClick={() => setOpenIndex(null)}
-                      className="focus-ring block min-h-(--hit-min) px-4 py-2.5 text-meta text-[#DCDED2] hover:bg-white/10 hover:text-[#F6F7F0]"
+                      className="focus-ring block min-h-10 rounded-sm px-3 py-2.5 text-meta font-medium text-ink hover:bg-accent-mint"
                     >
-                      {sub.label}
+                      All {item.label}
                     </Link>
-                  ))}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                    <div className="mx-2 my-1 border-t border-line" aria-hidden="true" />
+                    {subcategories.map((sub) => (
+                      <Link
+                        key={sub.tagSlug}
+                        href={`${item.href}&tags=${sub.tagSlug}`}
+                        role="menuitem"
+                        onClick={() => setOpenIndex(null)}
+                        className="focus-ring block min-h-10 rounded-sm px-3 py-2.5 text-meta text-ink-muted hover:bg-accent-mint hover:text-ink"
+                      >
+                        {sub.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </nav>
   );
 }

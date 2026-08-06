@@ -1,0 +1,337 @@
+import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
+import { ai as aiConfig } from "@/config/ai";
+import { ingest } from "@/config/ingest";
+import type { CrawlConfig } from "@/lib/validation/source";
+import { acquirePage } from "./acquisition";
+import { aggregate } from "./aggregate";
+import { discoverSource } from "./discovery";
+import { extractJsonLd, jsonLdToCandidates } from "./extractors/jsonld";
+import { extractMarkdown } from "./extractors/markdown";
+import { extractReadable, readabilityToCandidates } from "./extractors/readability";
+import { extractMetadata, extractSelectorFields } from "./extractors/selectors";
+import { hashReconciledFields } from "./hash";
+import { upsertJob } from "./job-service";
+import { normalize } from "./normalize";
+import { reconcile } from "./reconcile";
+import { finalizeRunIfComplete, incrementRunCounters, recordFailure } from "./run-tracking";
+import type { RawExtractionBundle } from "./types";
+
+function timeBudget(startedAt: number): boolean {
+  return Date.now() - startedAt < ingest.tickTimeBudgetMs;
+}
+
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let index = 0;
+  async function next(): Promise<void> {
+    const current = index++;
+    if (current >= items.length) return;
+    await worker(items[current]);
+    return next();
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => next()));
+}
+
+type RunCounters = Parameters<typeof incrementRunCounters>[1];
+
+async function maybeIncrementCounters(runId: string | null, counters: RunCounters) {
+  if (!runId) return;
+  const run = await prisma.ingestRun.findUnique({ where: { id: runId }, select: { status: true } });
+  if (run?.status === "RUNNING") await incrementRunCounters(runId, counters);
+}
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+async function runDiscoveryIfDue(): Promise<string[]> {
+  const now = Date.now();
+  const enabledSources = await prisma.source.findMany({
+    where: { enabled: true },
+    select: { id: true, cadenceMinutes: true, lastRunAt: true },
+  });
+
+  const due = enabledSources
+    .filter((s) => !s.lastRunAt || now - s.lastRunAt.getTime() >= s.cadenceMinutes * 60_000)
+    .sort((a, b) => (a.lastRunAt?.getTime() ?? 0) - (b.lastRunAt?.getTime() ?? 0))
+    .slice(0, ingest.discoveryPerTick);
+
+  const runIds: string[] = [];
+  for (const source of due) {
+    const runId = await discoverSource(source.id);
+    if (runId) runIds.push(runId);
+  }
+  return runIds;
+}
+
+// ---------------------------------------------------------------------------
+// Acquisition + extraction + reconciliation
+// ---------------------------------------------------------------------------
+
+interface AcquisitionCandidate {
+  id: string;
+  externalUrl: string;
+  sourceId: string;
+  ingestRunId: string | null;
+  contentHash: string;
+}
+
+async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCandidate[]> {
+  const now = Date.now();
+  const staleClaimCutoff = new Date(now - ingest.claimStaleMs);
+  const recrawlCutoff = new Date(now - ingest.recrawlAfterMs);
+
+  return prisma.rawJob.findMany({
+    where: {
+      OR: [
+        { fetchStatus: "PENDING" },
+        { fetchStatus: "FETCHING", updatedAt: { lt: staleClaimCutoff } },
+        {
+          fetchStatus: "FETCHED",
+          active: true,
+          OR: [{ lastCrawledAt: null }, { lastCrawledAt: { lt: recrawlCutoff } }],
+        },
+      ],
+    },
+    orderBy: { updatedAt: "asc" },
+    take: limit,
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true },
+  });
+}
+
+async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
+  await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FETCHING" } });
+
+  try {
+    const source = await prisma.source.findUnique({ where: { id: row.sourceId }, select: { crawlConfig: true } });
+    const config = source?.crawlConfig as unknown as CrawlConfig | undefined;
+
+    const acquired = await acquirePage(row.externalUrl);
+    const html = acquired.html;
+
+    const jsonLdPostings = extractJsonLd(html);
+    const { fields: selectorFields, candidates: selectorCandidates } = extractSelectorFields(
+      html,
+      row.externalUrl,
+      config?.detailSelectors,
+    );
+    const metadata = extractMetadata(html, row.externalUrl);
+    const readable = extractReadable(html, row.externalUrl);
+    const markdown = extractMarkdown(html);
+
+    const reconciled = reconcile(jsonLdToCandidates(jsonLdPostings), selectorCandidates, readabilityToCandidates(readable));
+    const newHash = hashReconciledFields(reconciled);
+    const isFirstFetch = row.contentHash === "";
+    const changed = isFirstFetch || newHash !== row.contentHash;
+    const canonicalUrl = metadata.canonicalUrl ?? acquired.redirectedUrl ?? null;
+
+    const bundle: RawExtractionBundle = {
+      originalUrl: row.externalUrl,
+      canonicalUrl,
+      httpStatus: acquired.httpStatus,
+      fetchedAt: acquired.fetchedAt,
+      html: acquired.html,
+      htmlTruncated: acquired.htmlTruncated,
+      jsonLd: jsonLdPostings,
+      selectors: selectorFields,
+      readableText: readable.text,
+      markdown,
+      metadata,
+      errors: [],
+      reconciled,
+    };
+
+    await prisma.rawJob.update({
+      where: { id: row.id },
+      data: {
+        payload: bundle as unknown as Prisma.InputJsonValue,
+        contentHash: newHash,
+        fetchStatus: "FETCHED",
+        httpStatus: acquired.httpStatus,
+        canonicalUrl,
+        lastCrawledAt: new Date(),
+        // undefined (not false) when unchanged — leaves whatever needsAggregation already was,
+        // which is exactly "skip unchanged": a row already fully aggregated stays that way.
+        needsAggregation: changed ? true : undefined,
+      },
+    });
+
+    // "new" is already counted at discovery time — only changed/unchanged apply to re-fetches.
+    if (!isFirstFetch) {
+      await maybeIncrementCounters(row.ingestRunId, changed ? { changedCount: 1 } : { unchangedCount: 1 });
+    }
+    if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
+  } catch (err) {
+    await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FAILED" } });
+    if (row.ingestRunId) {
+      await maybeIncrementCounters(row.ingestRunId, { failedCount: 1 });
+      await recordFailure({
+        ingestRunId: row.ingestRunId,
+        rawJobId: row.id,
+        stage: "ACQUISITION",
+        url: row.externalUrl,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      await finalizeRunIfComplete(row.ingestRunId);
+    }
+  }
+}
+
+async function drainAcquisition(): Promise<number> {
+  const candidates = await claimAcquisitionCandidates(ingest.acquisitionPerTick);
+  await runWithConcurrency(candidates, ingest.acquisitionConcurrency, processAcquisition);
+  return candidates.length;
+}
+
+// ---------------------------------------------------------------------------
+// AI aggregation
+// ---------------------------------------------------------------------------
+
+interface AggregationCandidate {
+  id: string;
+  externalUrl: string;
+  ingestRunId: string | null;
+  payload: unknown;
+}
+
+async function claimAggregationCandidates(limit: number): Promise<AggregationCandidate[]> {
+  const staleCutoff = new Date(Date.now() - ingest.claimStaleMs);
+  return prisma.rawJob.findMany({
+    where: {
+      needsAggregation: true,
+      fetchStatus: "FETCHED",
+      OR: [{ aggregationClaimedAt: null }, { aggregationClaimedAt: { lt: staleCutoff } }],
+    },
+    orderBy: { updatedAt: "asc" },
+    take: limit,
+    select: { id: true, externalUrl: true, ingestRunId: true, payload: true },
+  });
+}
+
+async function processAggregation(row: AggregationCandidate): Promise<void> {
+  await prisma.rawJob.update({ where: { id: row.id }, data: { aggregationClaimedAt: new Date() } });
+
+  try {
+    const bundle = row.payload as unknown as RawExtractionBundle;
+
+    const { result, inputTokens, outputTokens } = await aggregate({
+      externalUrl: row.externalUrl,
+      reconciled: bundle.reconciled,
+      markdown: bundle.markdown,
+      readableText: bundle.readableText,
+    });
+
+    const normalized = await normalize(result, row.id, row.externalUrl);
+
+    if (!normalized.ok) {
+      await prisma.$transaction([
+        prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
+        prisma.improvementRun.create({
+          data: {
+            rawJobId: row.id,
+            model: aiConfig.model,
+            promptVersion: aiConfig.promptVersion,
+            inputTokens,
+            outputTokens,
+            diff: result as unknown as Prisma.InputJsonValue,
+            status: "FAILED",
+            startedAt: new Date(),
+            finishedAt: new Date(),
+          },
+        }),
+      ]);
+
+      if (row.ingestRunId) {
+        await maybeIncrementCounters(row.ingestRunId, { validationFailedCount: 1 });
+        await recordFailure({
+          ingestRunId: row.ingestRunId,
+          rawJobId: row.id,
+          stage: "VALIDATION",
+          url: row.externalUrl,
+          message: `Missing required fields after aggregation: ${normalized.missingFields.join(", ")}`,
+        });
+      }
+    } else {
+      // Job upsert happens outside the transaction below — if the process crashes between the two,
+      // the worst case is one wasted retry next tick (needsAggregation stays true, re-aggregating
+      // re-upserts the *same* slug via normalize()'s slug-stability lookup), never a duplicate Job.
+      const job = await upsertJob(normalized.input);
+
+      await prisma.$transaction([
+        prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
+        prisma.improvementRun.create({
+          data: {
+            rawJobId: row.id,
+            jobId: job.id,
+            model: aiConfig.model,
+            promptVersion: aiConfig.promptVersion,
+            inputTokens,
+            outputTokens,
+            diff: result as unknown as Prisma.InputJsonValue,
+            status: "SUCCEEDED",
+            startedAt: new Date(),
+            finishedAt: new Date(),
+          },
+        }),
+      ]);
+    }
+
+    if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
+  } catch (err) {
+    // needsAggregation is deliberately left true — a transient AI/network failure is retried by
+    // the next tick automatically (Section F, point 11), unlike a validation failure above.
+    if (row.ingestRunId) {
+      await maybeIncrementCounters(row.ingestRunId, { aiFailedCount: 1 });
+      await recordFailure({
+        ingestRunId: row.ingestRunId,
+        rawJobId: row.id,
+        stage: "AGGREGATION",
+        url: row.externalUrl,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      await finalizeRunIfComplete(row.ingestRunId);
+    }
+  }
+}
+
+async function drainAggregation(): Promise<number> {
+  const candidates = await claimAggregationCandidates(ingest.aggregationPerTick);
+  for (const row of candidates) {
+    // Sequential, not concurrent — each item is one AI call; running them in parallel wouldn't
+    // meaningfully speed up an external API call and would just spike concurrent spend.
+    await processAggregation(row);
+  }
+  return candidates.length;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+
+export interface TickResult {
+  discoveryRunIds: string[];
+  acquisitionProcessed: number;
+  aggregationProcessed: number;
+  elapsedMs: number;
+}
+
+/**
+ * One bounded slice of ingestion work, safe to call as often as Vercel Cron is configured to call
+ * it (Section G). Every piece of state this touches is durable (RawJob/IngestRun columns) — a
+ * killed invocation just leaves rows for the next tick's claim queries to pick back up.
+ */
+export async function runTick(): Promise<TickResult> {
+  const startedAt = Date.now();
+
+  const discoveryRunIds = timeBudget(startedAt) ? await runDiscoveryIfDue() : [];
+  const acquisitionProcessed = timeBudget(startedAt) ? await drainAcquisition() : 0;
+  const aggregationProcessed = timeBudget(startedAt) ? await drainAggregation() : 0;
+
+  return {
+    discoveryRunIds,
+    acquisitionProcessed,
+    aggregationProcessed,
+    elapsedMs: Date.now() - startedAt,
+  };
+}

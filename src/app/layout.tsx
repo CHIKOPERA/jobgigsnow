@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Schibsted_Grotesk } from "next/font/google";
+import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { site } from "@/config";
 import { Header } from "@/components/nav/Header";
@@ -27,6 +28,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <Header />
           <main className="flex-1 pb-16 md:pb-0">{children}</main>
           <TabBar />
+          <Script
+            async
+            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4285411663423178"
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
         </body>
       </html>
     </ClerkProvider>

@@ -573,17 +573,21 @@ async function main() {
   // A minimal sourcing/improving trail so the full pipeline is visible in the DB,
   // even though the Phase 1 UI only ever reads PUBLISHED Job rows.
   console.log("Seeding a sample Source + RawJob + ImprovementRun...");
+  // Disabled: this is illustrative demo data (a fake .example domain, and a crawlConfig shape
+  // that predates the real crawler's schema) so the pipeline's tables aren't empty in Prisma
+  // Studio — not a real target. Enabled, the cron tick would try to crawl it every cadence and
+  // fail forever. Flip `enabled: true` only if you replace baseUrl/crawlConfig with something real.
+  const sourceFields = {
+    name: "Northwind Logistics careers page",
+    baseUrl: "https://northwindlogistics.example/careers",
+    crawlConfig: { strategy: "listing-then-detail", selector: ".job-card a" },
+    cadenceMinutes: 360,
+    enabled: false,
+  };
   const source = await prisma.source.upsert({
     where: { id: "seed-source-northwind" },
-    update: {},
-    create: {
-      id: "seed-source-northwind",
-      name: "Northwind Logistics careers page",
-      baseUrl: "https://northwindlogistics.example/careers",
-      crawlConfig: { strategy: "listing-then-detail", selector: ".job-card a" },
-      cadenceMinutes: 360,
-      enabled: true,
-    },
+    update: sourceFields,
+    create: { id: "seed-source-northwind", ...sourceFields },
   });
 
   const rawJob = await prisma.rawJob.upsert({

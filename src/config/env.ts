@@ -17,10 +17,22 @@ const envSchema = z.object({
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
 
   INGEST_SERVICE_TOKEN: z.string().min(16, "INGEST_SERVICE_TOKEN must be at least 16 characters"),
+  CRON_SECRET: z.string().min(16, "CRON_SECRET must be at least 16 characters"),
+
+  AI_PROVIDER: z.enum(["anthropic", "openai"]).default("anthropic"),
+  AI_MODEL: z.string().min(1).default("claude-sonnet-4-5"),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
 
   FEATURE_NATIVE_APPLY: boolFromString,
   FEATURE_ALERTS: boolFromString,
-});
+}).refine(
+  (env) => (env.AI_PROVIDER === "anthropic" ? !!env.ANTHROPIC_API_KEY : !!env.OPENAI_API_KEY),
+  {
+    message: "The API key matching AI_PROVIDER is required (ANTHROPIC_API_KEY or OPENAI_API_KEY).",
+    path: ["AI_PROVIDER"],
+  },
+);
 
 function loadEnv() {
   const parsed = envSchema.safeParse(process.env);

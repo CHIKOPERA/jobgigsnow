@@ -27,13 +27,17 @@ model Source {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  rawJobs RawJob[]
+  rawJobs    RawJob[]
+  ingestRuns IngestRun[]
 
   @@index([enabled])
 }
 
 enum FetchStatus {
   PENDING
+  /// Claimed by an in-flight acquisition attempt; stale claims (updatedAt past the claim window)
+  /// are reclaimed by the next tick rather than blocking forever on a killed invocation.
+  FETCHING
   FETCHED
   FAILED
 }
@@ -52,17 +56,109 @@ model RawJob {
   /// Hash of the payload, used to detect unchanged re-crawls.
   contentHash  String
   fetchStatus  FetchStatus @default(PENDING)
+  /// Resolved canonical URL (<link rel="canonical"> or redirect target) — may differ from externalUrl.
+  canonicalUrl String?
+  /// HTTP status of the last acquisition attempt.
+  httpStatus   Int?
+  /// Set every discovery pass where this externalId is still present in the source's listing.
+  lastSeenAt   DateTime?
+  /// Set every time the detail page itself was actually re-fetched (distinct from lastSeenAt).
+  lastCrawledAt DateTime?
+  /// Set when the reconciled content actually changed vs. the previous contentHash.
+  lastChangedAt DateTime?
+  /// Increments each discovery pass this externalId is absent; resets to 0 when seen again.
+  consecutiveMissingRuns Int @default(0)
+  /// Flips false once consecutiveMissingRuns crosses ingest.missingRunsThreshold.
+  active        Boolean   @default(true)
+  /// True until a normalized Job has been produced (or aggregation is given up on after validation
+  /// failure) — needed because "job IS NULL" can't distinguish "never attempted" from "permanently
+  /// invalid" from "transient AI failure, please retry."
+  needsAggregation Boolean @default(true)
+  /// Claim marker so overlapping cron ticks don't double-pay for the same AI call.
+  aggregationClaimedAt DateTime?
+  /// Stamped with the extractor/selector logic version that produced this row's payload — lets a
+  /// future rewrite force-reprocess old rows by bumping the version.
+  extractionVersion String?
   discoveredAt DateTime    @default(now())
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  ingestRunId  String?
+  ingestRun    IngestRun?  @relation(fields: [ingestRunId], references: [id], onDelete: SetNull)
+
   improvementRuns ImprovementRun[]
+  ingestFailures  IngestFailure[]
   job             Job?
 
   // Idempotent ingestion: re-posting the same (source, externalId) upserts, never duplicates.
   @@unique([sourceId, externalId])
   @@index([contentHash])
   @@index([fetchStatus])
+  @@index([sourceId, active])
+  @@index([fetchStatus, needsAggregation])
+  @@index([ingestRunId])
+}
+
+enum IngestRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// One row per source per discovery cycle. status=FAILED means discovery itself could not
+/// complete (listing unreachable, robots.txt disallowed) — NOT "some items inside it failed."
+/// Per-item failures are tracked via the counters below and IngestFailure rows; a run with
+/// failedCount > 0 is still COMPLETED.
+model IngestRun {
+  id                    String          @id @default(cuid())
+  sourceId              String
+  source                Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  status                IngestRunStatus @default(RUNNING)
+  startedAt             DateTime        @default(now())
+  finishedAt            DateTime?
+  discoveredCount       Int             @default(0)
+  newCount              Int             @default(0)
+  changedCount          Int             @default(0)
+  unchangedCount        Int             @default(0)
+  missingCount          Int             @default(0)
+  inactiveCount         Int             @default(0)
+  failedCount           Int             @default(0)
+  validationFailedCount Int             @default(0)
+  aiFailedCount         Int             @default(0)
+
+  rawJobs  RawJob[]
+  failures IngestFailure[]
+
+  @@index([sourceId, startedAt])
+  @@index([status])
+}
+
+enum IngestFailureStage {
+  DISCOVERY
+  ACQUISITION
+  EXTRACTION
+  AGGREGATION
+  VALIDATION
+  PERSISTENCE
+}
+
+/// Human-readable per-URL error detail — nothing else in the schema captures more than a bare
+/// enum status, and "failed extractions can be inspected" needs an actual message/detail payload.
+model IngestFailure {
+  id          String             @id @default(cuid())
+  ingestRunId String
+  ingestRun   IngestRun          @relation(fields: [ingestRunId], references: [id], onDelete: Cascade)
+  rawJobId    String?
+  rawJob      RawJob?            @relation(fields: [rawJobId], references: [id], onDelete: SetNull)
+  stage       IngestFailureStage
+  url         String?
+  message     String
+  detail      Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([ingestRunId])
+  @@index([rawJobId])
+  @@index([stage])
 }
 
 // ---------------------------------------------------------------------------
