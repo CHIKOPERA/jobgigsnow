@@ -25,6 +25,20 @@ test("parseSmartRecruitersPage keeps valid public posting URLs", () => {
   });
 });
 
+test("parseSmartRecruitersPage derives an ID-only public URL from list responses", () => {
+  const parsed = parseSmartRecruitersPage({
+    totalFound: 1,
+    content: [{ id: "744000141897269", company: { identifier: "StandardBankGroup" } }],
+  });
+
+  assert.deepEqual(parsed.postings, [
+    {
+      id: "744000141897269",
+      postingUrl: "https://jobs.smartrecruiters.com/StandardBankGroup/744000141897269",
+    },
+  ]);
+});
+
 test("parseSmartRecruitersPage rejects responses without content", () => {
   assert.throws(() => parseSmartRecruitersPage({ totalFound: 1 }), /missing content/);
 });

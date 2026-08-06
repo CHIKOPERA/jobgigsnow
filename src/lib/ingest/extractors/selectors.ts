@@ -61,7 +61,7 @@ function readField($: CheerioAPI, selector: string, field: SelectorField, pageUr
 
   // Microdata commonly stores values in meta/content or custom-element attributes rather than
   // text nodes (SmartRecruiters uses both forms for company and formatted location).
-  const attributeValue = el.attr("content") ?? el.attr("formattedAddress");
+  const attributeValue = el.attr("content") ?? el.attr("formattedAddress") ?? el.attr("formattedaddress");
   return attributeValue?.trim() || undefined;
 }
 

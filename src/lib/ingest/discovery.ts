@@ -78,7 +78,7 @@ async function crawlSmartRecruiters(
   for (let page = 0; page < config.maxPages; page++) {
     const endpoint = buildSmartRecruitersPageUrl(config.companyIdentifier, config.pageSize, offset);
     try {
-      const parsed = parseSmartRecruitersPage(await fetchSmartRecruitersPage(endpoint));
+      const parsed = parseSmartRecruitersPage(await fetchSmartRecruitersPage(endpoint), config.companyIdentifier);
       for (const posting of parsed.postings) links.add(posting.postingUrl);
 
       offset += parsed.postings.length;

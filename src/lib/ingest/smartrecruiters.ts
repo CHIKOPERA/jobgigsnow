@@ -18,7 +18,7 @@ export function buildSmartRecruitersPageUrl(companyIdentifier: string, limit: nu
 }
 
 /** Validates only the fields discovery owns; the detail-page pipeline handles job content. */
-export function parseSmartRecruitersPage(payload: unknown): SmartRecruitersPage {
+export function parseSmartRecruitersPage(payload: unknown, fallbackCompanyIdentifier?: string): SmartRecruitersPage {
   if (!payload || typeof payload !== "object") {
     throw new Error("SmartRecruiters returned an invalid response.");
   }
@@ -32,10 +32,21 @@ export function parseSmartRecruitersPage(payload: unknown): SmartRecruitersPage 
   for (const value of record.content) {
     if (!value || typeof value !== "object") continue;
     const posting = value as Record<string, unknown>;
-    if (typeof posting.id !== "string" || typeof posting.postingUrl !== "string") continue;
+    if (typeof posting.id !== "string") continue;
+
+    const company = posting.company && typeof posting.company === "object"
+      ? (posting.company as Record<string, unknown>).identifier
+      : undefined;
+    const companyIdentifier = typeof company === "string" ? company : fallbackCompanyIdentifier;
+    const postingUrl = typeof posting.postingUrl === "string"
+      ? posting.postingUrl
+      : companyIdentifier
+        ? `https://jobs.smartrecruiters.com/${encodeURIComponent(companyIdentifier)}/${encodeURIComponent(posting.id)}`
+        : null;
+    if (!postingUrl) continue;
 
     try {
-      const url = new URL(posting.postingUrl);
+      const url = new URL(postingUrl);
       if (url.protocol === "https:" || url.protocol === "http:") {
         postings.push({ id: posting.id, postingUrl: url.toString() });
       }

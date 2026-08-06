@@ -51,6 +51,12 @@ test("reads a <time datetime> attribute rather than its text content", () => {
   assert.equal(fields.postedAt, "2026-08-01");
 });
 
+test("reads SmartRecruiters custom-element formatted addresses", () => {
+  const html = '<spl-job-location formattedAddress="1 Circular Rd, Douglas, Isle of Man"></spl-job-location>';
+  const { fields } = extractSelectorFields(html, PAGE_URL, { location: "spl-job-location" });
+  assert.equal(fields.location, "1 Circular Rd, Douglas, Isle of Man");
+});
+
 test("extractMetadata resolves a relative canonical link against the page URL", () => {
   const html = `<html><head>
     <title>Forklift Operator | Northwind</title>
