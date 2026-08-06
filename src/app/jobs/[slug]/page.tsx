@@ -4,6 +4,7 @@ import { JobDetail } from "@/components/job/JobDetail";
 import { jobDetailSelect, toJobDetail } from "@/lib/dto";
 import { prisma } from "@/lib/prisma";
 import { getSavedJobIds } from "@/lib/saved";
+import { site } from "@/config";
 import { JobsShell } from "../JobsShell";
 
 export const dynamic = "force-dynamic";
@@ -16,16 +17,40 @@ interface JobPageProps {
 async function getJob(slug: string) {
   const row = await prisma.job.findFirst({
     where: { slug, status: "PUBLISHED" },
-    select: jobDetailSelect,
+    select: {
+      ...jobDetailSelect,
+      socialImageUrl: true,
+      socialImageAlt: true,
+    },
   });
-  return row ? toJobDetail(row) : null;
+  return row ? {
+    detail: toJobDetail(row),
+    socialImageUrl: row.socialImageUrl,
+    socialImageAlt: row.socialImageAlt,
+  } : null;
 }
 
 export async function generateMetadata({ params }: JobPageProps): Promise<Metadata> {
   const { slug } = await params;
   const job = await getJob(slug);
   if (!job) return { title: "Job not found" };
-  return { title: `${job.title} at ${job.companyName}` };
+  const title = `${job.detail.title} at ${job.detail.companyName}`;
+  const description = `${job.detail.title} opportunity at ${job.detail.companyName} in ${job.detail.location}. View the details and apply on JobGigsNow.`;
+  const url = `${site.url.replace(/\/$/, "")}/jobs/${slug}`;
+  const images = job.socialImageUrl ? [{
+    url: job.socialImageUrl,
+    width: 1200,
+    height: 630,
+    alt: job.socialImageAlt ?? title,
+    type: "image/jpeg",
+  }] : undefined;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: { type: "website", title, description, url, siteName: site.name, images },
+    twitter: { card: "summary_large_image", title, description, images },
+  };
 }
 
 export default async function JobPage({ params, searchParams }: JobPageProps) {
@@ -33,13 +58,13 @@ export default async function JobPage({ params, searchParams }: JobPageProps) {
   const job = await getJob(slug);
   if (!job) notFound();
 
-  const savedJobIds = await getSavedJobIds([job.id]);
+  const savedJobIds = await getSavedJobIds([job.detail.id]);
 
   return (
     <JobsShell
       searchParams={await searchParams}
       activeSlug={slug}
-      detail={<JobDetail job={job} saved={savedJobIds.has(job.id)} />}
+      detail={<JobDetail job={job.detail} saved={savedJobIds.has(job.detail.id)} />}
     />
   );
 }

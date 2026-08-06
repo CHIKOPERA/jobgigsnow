@@ -24,6 +24,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
 
+  PEXELS_API_KEY: z.string().min(1).optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().min(1).optional(),
+  CLOUDFLARE_R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  CLOUDFLARE_R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  CLOUDFLARE_R2_BUCKET_NAME: z.string().min(1).default("jobgigsnow"),
+  CLOUDFLARE_R2_PUBLIC_DOMAIN: z.string().min(1).optional(),
+
   FEATURE_NATIVE_APPLY: boolFromString,
   FEATURE_ALERTS: boolFromString,
 }).refine(

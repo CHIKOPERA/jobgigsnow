@@ -276,6 +276,11 @@ model Job {
   description    String
   /// Last admin instruction used for the optional AI rewrite on the review screen.
   rewritePrompt  String?
+  /// Optimized 1200x630 image used only in link-preview metadata (not the public job UI).
+  socialImageUrl String?
+  socialImageAlt String?
+  socialImageCredit String?
+  socialImageSourceUrl String?
   highlights     String[]       @default([])
   /// External apply URL — set unless isNative is true.
   applyUrl       String?

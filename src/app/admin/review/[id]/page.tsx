@@ -29,6 +29,10 @@ export default async function ReviewJobPage({ params }: { params: Promise<{ id: 
         applyUrl: job.applyUrl ?? "",
         rewritePrompt: job.rewritePrompt ?? "",
         rawUrl: job.rawJob?.externalUrl ?? null,
+        socialImageUrl: job.socialImageUrl,
+        socialImageAlt: job.socialImageAlt,
+        socialImageCredit: job.socialImageCredit,
+        socialImageSourceUrl: job.socialImageSourceUrl,
       }}
     />
   );

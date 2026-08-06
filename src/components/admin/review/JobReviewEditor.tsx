@@ -34,6 +34,21 @@ interface ReviewJob {
   applyUrl: string;
   rewritePrompt: string;
   rawUrl: string | null;
+  socialImageUrl: string | null;
+  socialImageAlt: string | null;
+  socialImageCredit: string | null;
+  socialImageSourceUrl: string | null;
+}
+
+interface PexelsPhoto {
+  id: number;
+  width: number;
+  height: number;
+  url: string;
+  thumbnail: string;
+  alt: string;
+  photographer: string;
+  photographerUrl: string;
 }
 
 function ToolbarButton({
@@ -78,6 +93,17 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
   const [busy, setBusy] = useState<"save" | "rewrite" | "publish" | "reject" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imageQuery, setImageQuery] = useState(initial.title);
+  const [imageResults, setImageResults] = useState<PexelsPhoto[]>([]);
+  const [searchingImages, setSearchingImages] = useState(false);
+  const [savingPhotoId, setSavingPhotoId] = useState<number | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [socialImage, setSocialImage] = useState({
+    url: initial.socialImageUrl,
+    alt: initial.socialImageAlt,
+    credit: initial.socialImageCredit,
+    sourceUrl: initial.socialImageSourceUrl,
+  });
 
   const editor = useEditor({
     extensions: [StarterKit.configure({ heading: { levels: [2, 3] } })],
@@ -159,10 +185,59 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
     }
   }
 
+  async function searchImages() {
+    if (!imageQuery.trim()) return;
+    setSearchingImages(true);
+    setImageError(null);
+    setImageResults([]);
+    try {
+      const response = await fetch(`/api/admin/pexels/search?q=${encodeURIComponent(imageQuery.trim())}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error?.message ?? "Pexels search failed.");
+      setImageResults(result.photos ?? []);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "Pexels search failed.");
+    } finally {
+      setSearchingImages(false);
+    }
+  }
+
+  async function selectSocialImage(photo: PexelsPhoto) {
+    setSavingPhotoId(photo.id);
+    setImageError(null);
+    try {
+      const response = await fetch(`/api/admin/jobs/${initial.id}/social-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoId: photo.id,
+          url: photo.url,
+          alt: photo.alt,
+          photographer: photo.photographer,
+          photographerUrl: photo.photographerUrl,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error?.message ?? "The image could not be saved.");
+      setSocialImage({
+        url: result.socialImageUrl,
+        alt: result.socialImageAlt,
+        credit: result.socialImageCredit,
+        sourceUrl: result.socialImageSourceUrl,
+      });
+      setNotice("Social preview image optimized and saved.");
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "The image could not be saved.");
+    } finally {
+      setSavingPhotoId(null);
+    }
+  }
+
   const fieldClass = "focus-ring mt-1.5 h-11 w-full rounded-md border border-line bg-surface px-3 text-meta";
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="flex flex-col gap-6">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="rounded-lg border border-line bg-surface p-5 md:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-5">
           <div>
@@ -274,6 +349,64 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
           {busy === "reject" ? "Rejecting…" : "Reject listing"}
         </button>
       </aside>
+      </div>
+
+      <section className="rounded-lg border border-line bg-surface p-5 md:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-label uppercase tracking-[0.08em] text-ink-muted">Social preview image</p>
+            <h2 className="mt-1 text-title font-semibold">Choose an image from Pexels</h2>
+            <p className="mt-1 max-w-2xl text-meta text-ink-muted">
+              Saved as an optimized 1200×630 JPEG for link previews. It is not displayed on the public job page.
+            </p>
+          </div>
+          {socialImage.url && (
+            <div className="w-full max-w-xs">
+              {/* This URL is selected by an admin and served from the configured R2 public domain. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={socialImage.url} alt={socialImage.alt ?? "Current social preview"} className="aspect-[1200/630] w-full rounded-md object-cover" />
+              {socialImage.credit && (
+                <p className="mt-1 text-[12px] text-ink-muted">
+                  {socialImage.sourceUrl ? <a href={socialImage.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{socialImage.credit}</a> : socialImage.credit}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={imageQuery}
+            onChange={(event) => setImageQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void searchImages(); }}
+            aria-label="Pexels search"
+            className="focus-ring h-11 flex-1 rounded-md border border-line bg-surface px-3 text-meta"
+          />
+          <button type="button" onClick={searchImages} disabled={searchingImages || !imageQuery.trim()} className="focus-ring h-11 rounded-pill bg-ink px-6 text-meta font-semibold text-surface disabled:opacity-50">
+            {searchingImages ? "Searching…" : "Search Pexels"}
+          </button>
+        </div>
+
+        {imageError && <p className="mt-3 rounded-md bg-danger/10 p-3 text-meta text-danger">{imageError}</p>}
+        {imageResults.length > 0 && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {imageResults.map((photo) => (
+              <article key={photo.id} className="overflow-hidden rounded-md border border-line bg-surface-sunk">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.thumbnail} alt={photo.alt} className="aspect-video w-full object-cover" />
+                <div className="p-3">
+                  <a href={photo.photographerUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] text-ink-muted hover:underline">
+                    {photo.photographer} · Pexels
+                  </a>
+                  <button type="button" onClick={() => selectSocialImage(photo)} disabled={savingPhotoId !== null} className="focus-ring mt-2 h-9 w-full rounded-pill border border-line-strong bg-surface px-3 text-[12px] font-semibold disabled:opacity-50">
+                    {savingPhotoId === photo.id ? "Optimizing & saving…" : "Use for preview"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
