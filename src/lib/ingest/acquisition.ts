@@ -3,6 +3,7 @@ import { PDFParse } from "pdf-parse";
 import { sources } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
 import { acquireCornerstone } from "./cornerstone";
+import { jobPostingHtml } from "./job-html";
 import { acquireOracle, isOracleJobUrl } from "./oracle";
 import { acquireHostSlot } from "./rate-limiter";
 import { isAllowedByRobots } from "./robots";
@@ -52,6 +53,41 @@ function fetchAts(url: string | URL | Request, init?: RequestInit): Promise<Resp
   });
 }
 
+interface SmartRecruitersDetail {
+  name?: string;
+  jobAd?: { sections?: { jobDescription?: { text?: string } } };
+  location?: { city?: string; country?: string; remote?: boolean };
+  company?: { name?: string; identifier?: string };
+  employmentType?: string;
+}
+
+/** Whether this URL is a SmartRecruiters public job page (React SPA — use the API instead). */
+export function isSmartRecruitersJobUrl(url: URL): boolean {
+  return url.hostname === "jobs.smartrecruiters.com" && url.pathname.split("/").filter(Boolean).length >= 2;
+}
+
+/** Fetches a SmartRecruiters job via the public REST API instead of scraping the React SPA. */
+async function acquireSmartRecruiters(url: URL, fetcher: typeof fetch = fetch): Promise<string> {
+  const [company, jobId] = url.pathname.split("/").filter(Boolean);
+  if (!company || !jobId) throw new Error("Unrecognized SmartRecruiters job URL.");
+  const endpoint = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings/${encodeURIComponent(jobId)}`;
+  const res = await fetcher(endpoint, { headers: { accept: "application/json" } });
+  if (!res.ok) throw new Error(`SmartRecruiters detail returned HTTP ${res.status}`);
+  const job = (await res.json()) as SmartRecruitersDetail;
+  if (!job.name) throw new Error("SmartRecruiters detail did not include a job title.");
+  const location = job.location
+    ? [job.location.city, job.location.country].filter(Boolean).join(", ")
+    : undefined;
+  return jobPostingHtml({
+    title: job.name,
+    company: job.company?.name,
+    location: location || null,
+    description: job.jobAd?.sections?.jobDescription?.text ?? null,
+    employmentType: job.employmentType ?? null,
+    applyUrl: url.toString(),
+  });
+}
+
 async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<AcquisitionResult> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= sources.fetchMaxRetries; attempt++) {
@@ -63,6 +99,8 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
         atsHtml = await acquireOracle(parsedUrl, config.companyName, fetchAts);
       } else if (config?.provider === "cornerstone" && /\/requisition\//.test(parsedUrl.pathname)) {
         atsHtml = await acquireCornerstone(parsedUrl, config, fetchAts);
+      } else if (isSmartRecruitersJobUrl(parsedUrl)) {
+        atsHtml = await acquireSmartRecruiters(parsedUrl, fetchAts);
       }
       if (atsHtml != null) {
         const truncated = atsHtml.length > sources.maxHtmlBytes;
@@ -103,11 +141,23 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
 }
 
 export async function acquirePage(url: string, config?: CrawlConfig): Promise<AcquisitionResult> {
-  if (!(await isAllowedByRobots(url))) {
+  const parsedUrl = new URL(url);
+
+  // ATS providers that use a dedicated JSON API (Workday, Oracle, Cornerstone, SmartRecruiters)
+  // never actually fetch the robots-checked HTML URL — they call a different API endpoint instead.
+  // Skip the robots check for them to avoid incorrectly blocking a crawl because a site's
+  // robots.txt disallows its public /hcmUI/, /ux/ats/, or /jobs/ paths.
+  const usesAtsApi =
+    isWorkdayJobUrl(parsedUrl) ||
+    isOracleJobUrl(parsedUrl) ||
+    isSmartRecruitersJobUrl(parsedUrl) ||
+    (config?.provider === "cornerstone" && /\/requisition\//.test(parsedUrl.pathname));
+
+  if (!usesAtsApi && !(await isAllowedByRobots(url))) {
     throw new Error(`Disallowed by robots.txt: ${url}`);
   }
 
-  const release = await acquireHostSlot(new URL(url).hostname);
+  const release = await acquireHostSlot(parsedUrl.hostname);
   try {
     return await fetchWithRetry(url, config);
   } finally {

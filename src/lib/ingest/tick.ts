@@ -59,10 +59,15 @@ async function runDiscoveryIfDue(): Promise<string[]> {
     .slice(0, ingest.discoveryPerTick);
 
   const runIds: string[] = [];
-  for (const source of due) {
-    const runId = await discoverSource(source.id);
-    if (runId) runIds.push(runId);
-  }
+  // Run discoveries concurrently — each discoverSource catches its own errors and never throws,
+  // so Promise.all is safe. Concurrent discovery prevents HTML sources with long pagination
+  // crawls from blocking the budget before acquisition can run.
+  await Promise.all(
+    due.map(async (source) => {
+      const runId = await discoverSource(source.id);
+      if (runId) runIds.push(runId);
+    }),
+  );
   return runIds;
 }
 
@@ -76,6 +81,7 @@ interface AcquisitionCandidate {
   sourceId: string;
   ingestRunId: string | null;
   contentHash: string;
+  source: { crawlConfig: unknown } | null;
 }
 
 async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCandidate[]> {
@@ -97,7 +103,7 @@ async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCan
     },
     orderBy: { updatedAt: "asc" },
     take: limit,
-    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true },
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, source: { select: { crawlConfig: true } } },
   });
 }
 
@@ -105,8 +111,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
   await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FETCHING" } });
 
   try {
-    const source = await prisma.source.findUnique({ where: { id: row.sourceId }, select: { crawlConfig: true } });
-    const config = source?.crawlConfig as unknown as CrawlConfig | undefined;
+    const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
 
     const acquired = await acquirePage(row.externalUrl, config);
     const html = acquired.html;
@@ -372,7 +377,7 @@ async function drainAggregation(): Promise<number> {
 export async function processQueuedRawJob(rawJobId: string): Promise<void> {
   const acquisition = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
-    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, fetchStatus: true },
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, fetchStatus: true, source: { select: { crawlConfig: true } } },
   });
   if (!acquisition) return;
 

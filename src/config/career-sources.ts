@@ -79,7 +79,8 @@ export const careerSources: CreateSourceInput[] = [
     name: "Anglo American Careers",
     baseUrl: "https://www.angloamerican.com/careers/job-opportunities/apply",
     cadenceMinutes: 360,
-    enabled: true,
+    // Disabled: listing page returns HTTP 403 — site blocks automated access.
+    enabled: false,
     crawlConfig: {
       provider: "html",
       listingUrls: ["https://www.angloamerican.com/careers/job-opportunities/apply"],
@@ -105,7 +106,8 @@ export const careerSources: CreateSourceInput[] = [
     name: "Coca-Cola Beverages Africa Careers",
     baseUrl: "https://ccba.erecruit.co/candidateapp/jobs/browse",
     cadenceMinutes: 360,
-    enabled: true,
+    // Disabled: all /candidateapp/ paths are disallowed by robots.txt.
+    enabled: false,
     crawlConfig: {
       provider: "html",
       listingUrls: ccbaCategories,
@@ -133,6 +135,9 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
+      // TODO: verify — this points to the investor-relations subdomain on a /test/ path, which
+      // may be a staging environment. Check whether https://www.implats.co.za/careers-listings.php
+      // uses the same .job-listing a[href] selector before switching.
       listingUrls: ["https://www.implats-ir.co.za/test/careers-listings.php"],
       linkSelector: ".job-listing a[href]",
       linkAttr: "href",

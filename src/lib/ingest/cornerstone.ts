@@ -38,9 +38,31 @@ function homeUrl(config: CornerstoneConfig): string {
 }
 
 export function parseCornerstoneContext(html: string): CornerstoneContext {
-  const match = html.match(/csod\.context=(\{[\s\S]*?\});<\/script>/);
-  if (!match) throw new Error("Cornerstone page did not expose its public career-site context.");
-  return JSON.parse(match[1]) as CornerstoneContext;
+  const marker = "csod.context=";
+  const markerIdx = html.indexOf(marker);
+  if (markerIdx === -1) throw new Error("Cornerstone page did not expose its public career-site context.");
+  const start = html.indexOf("{", markerIdx);
+  if (start === -1) throw new Error("Cornerstone context JSON not found.");
+
+  // Walk forward with balanced-brace counting to find the end of the JSON object.
+  // A non-greedy regex like /\{[\s\S]*?\}/ would stop at the first closing brace and truncate
+  // nested objects (e.g. endpoints.cloud), so we count braces explicitly instead.
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return JSON.parse(html.slice(start, i + 1)) as CornerstoneContext;
+    }
+  }
+  throw new Error("Cornerstone context JSON was not properly terminated.");
 }
 
 async function getContext(config: CornerstoneConfig, fetcher: typeof fetch): Promise<CornerstoneContext> {

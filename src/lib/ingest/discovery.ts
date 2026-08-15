@@ -166,6 +166,32 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
 
     const diff = diffDiscoveredUrls(liveUrls, previouslyActive);
 
+    // Collect old ingestRunIds before we reassign them — needed to finalize any runs that
+    // become empty after the reassignment (a run whose jobs all move to the new run will
+    // never be finalized otherwise because finalizeRunIfComplete is only called per-job).
+    const displacedRunIds = new Set<string>();
+    if (diff.stillPresentUrls.length > 0 || diff.missingRows.length > 0) {
+      const displaced = await prisma.rawJob.findMany({
+        where: {
+          id: { in: diff.missingRows.map((r) => r.id) },
+          ingestRunId: { not: null },
+        },
+        select: { ingestRunId: true },
+      });
+      const displacedByUrl = await prisma.rawJob.findMany({
+        where: {
+          sourceId,
+          externalUrl: { in: diff.stillPresentUrls },
+          ingestRunId: { not: null },
+        },
+        select: { ingestRunId: true },
+        distinct: ["ingestRunId"],
+      });
+      for (const row of [...displaced, ...displacedByUrl]) {
+        if (row.ingestRunId && row.ingestRunId !== run.id) displacedRunIds.add(row.ingestRunId);
+      }
+    }
+
     await prisma.rawJob.updateMany({
       where: { sourceId, externalUrl: { in: diff.stillPresentUrls } },
       data: { lastSeenAt: now, consecutiveMissingRuns: 0, ingestRunId: run.id },
@@ -228,6 +254,12 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
 
     await prisma.source.update({ where: { id: sourceId }, data: { lastRunAt: now } });
     await finalizeRunIfComplete(run.id);
+
+    // Finalize any old runs whose jobs were just reassigned to this run — they're now empty
+    // and would stay RUNNING forever if we don't check them here.
+    for (const oldRunId of displacedRunIds) {
+      await finalizeRunIfComplete(oldRunId);
+    }
 
     return run.id;
   } catch (err) {

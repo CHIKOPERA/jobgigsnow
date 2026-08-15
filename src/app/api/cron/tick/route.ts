@@ -2,9 +2,9 @@ import { ingest } from "@/config/ingest";
 import { runTick } from "@/lib/ingest/tick";
 import { errorResponse } from "@/lib/validation/common";
 
-// Bounds one invocation's runtime (Section G) — raise this if the deployed plan allows more and
-// tick batch sizes in src/config/ingest.ts are increased to match.
-export const maxDuration = 60;
+// Bounds one invocation's runtime (Section G) — requires Pro or higher plan (Hobby caps at 10s).
+// Raise in concert with tickTimeBudgetMs in src/config/ingest.ts.
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   // Vercel sends `Authorization: Bearer <CRON_SECRET>` automatically on every scheduled

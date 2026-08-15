@@ -9,11 +9,12 @@ export const ingest = {
   queueClaimMax: 50,
 
   // Cron tick batching (Section G) — every value here bounds one /api/cron/tick invocation.
-  tickTimeBudgetMs: 45_000,
-  discoveryPerTick: 2,
-  acquisitionPerTick: 8,
-  acquisitionConcurrency: 3,
-  aggregationPerTick: 5,
+  // Budget is set well within the 300s maxDuration so the function always returns cleanly.
+  tickTimeBudgetMs: 240_000,
+  discoveryPerTick: 10,
+  acquisitionPerTick: 40,
+  acquisitionConcurrency: 8,
+  aggregationPerTick: 10,
 
   // How long a claimed-but-not-finished row (FETCHING / aggregationClaimedAt) is considered
   // abandoned and eligible for another tick to reclaim.
