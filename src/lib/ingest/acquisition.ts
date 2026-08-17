@@ -1,5 +1,4 @@
 import "server-only";
-import { PDFParse } from "pdf-parse";
 import { sources } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
 import { acquireCornerstone } from "./cornerstone";
@@ -34,13 +33,17 @@ function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-async function pdfToHtml(data: ArrayBuffer): Promise<string> {
-  const parser = new PDFParse({ data: new Uint8Array(data) });
+async function pdfToHtml(data: ArrayBuffer, sourceUrl: string): Promise<string> {
   try {
-    const result = await parser.getText();
-    return `<!doctype html><html><body><main><article><pre>${escapeHtml(result.text)}</pre></article></main></body></html>`;
-  } finally {
-    await parser.destroy();
+    // Dynamic import so pdfjs-dist@5's module-init code (which references browser globals like
+    // DOMMatrix) is only evaluated when a PDF is actually encountered, not at route startup.
+    // If the native canvas polyfill is absent the import rejects — we fall back to a stub that
+    // still captures the apply URL so the AI aggregation step can record the listing.
+    const { default: PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse(Buffer.from(data));
+    return `<!doctype html><html><body><main><article><pre>${escapeHtml(parser.text)}</pre></article></main></body></html>`;
+  } catch {
+    return `<!doctype html><html><body><main><article><p>PDF document — <a href="${escapeHtml(sourceUrl)}">${escapeHtml(sourceUrl)}</a></p></article></main></body></html>`;
   }
 }
 
@@ -134,7 +137,7 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
       });
       const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
       const html = contentType.includes("application/pdf") || parsedUrl.pathname.toLowerCase().endsWith(".pdf")
-        ? await pdfToHtml(await res.arrayBuffer())
+        ? await pdfToHtml(await res.arrayBuffer(), url)
         : await res.text();
       const truncated = html.length > sources.maxHtmlBytes;
       return {
