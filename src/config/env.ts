@@ -31,6 +31,11 @@ const envSchema = z.object({
   CLOUDFLARE_R2_BUCKET_NAME: z.string().min(1).default("jobgigsnow"),
   CLOUDFLARE_R2_PUBLIC_DOMAIN: z.string().min(1).optional(),
 
+  // JS-rendering fallback for HTML sources that return an empty shell (SPAs).
+  // Get a token at console.lightpanda.io — set this and add jsRendering:true to any source's
+  // crawlConfig to route its detail-page acquisitions through Lightpanda Cloud.
+  LIGHTPANDA_API_TOKEN: z.string().min(1).optional(),
+
   FEATURE_NATIVE_APPLY: boolFromString,
   FEATURE_ALERTS: boolFromString,
 }).refine(

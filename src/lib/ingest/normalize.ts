@@ -45,7 +45,7 @@ export async function normalize(
       highlights: [],
       ...built.fields,
       isNative: false,
-      status: "READY",
+      status: "PUBLISHED",
     },
   };
 }

@@ -4,6 +4,7 @@ import { sources } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
 import { acquireCornerstone } from "./cornerstone";
 import { jobPostingHtml } from "./job-html";
+import { fetchWithLightpanda, isLightpandaConfigured } from "./lightpanda";
 import { acquireOracle, isOracleJobUrl } from "./oracle";
 import { acquireHostSlot } from "./rate-limiter";
 import { isAllowedByRobots } from "./robots";
@@ -108,6 +109,19 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
           html: truncated ? atsHtml.slice(0, sources.maxHtmlBytes) : atsHtml,
           htmlTruncated: truncated,
           httpStatus: 200,
+          redirectedUrl: null,
+          fetchedAt: new Date().toISOString(),
+        };
+      }
+
+      // JS-rendered HTML: use Lightpanda Cloud if the source opts in and a token is set.
+      if (config?.provider === "html" && config.jsRendering && isLightpandaConfigured()) {
+        const { html, httpStatus } = await fetchWithLightpanda(url);
+        const truncated = html.length > sources.maxHtmlBytes;
+        return {
+          html: truncated ? html.slice(0, sources.maxHtmlBytes) : html,
+          htmlTruncated: truncated,
+          httpStatus,
           redirectedUrl: null,
           fetchedAt: new Date().toISOString(),
         };

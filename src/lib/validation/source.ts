@@ -36,6 +36,10 @@ const htmlCrawlConfigSchema = z.object({
       maxPages: z.number().int().positive().max(50).default(10),
     })
     .optional(),
+  // When true, detail-page acquisition is routed through Lightpanda Cloud (JS rendering) instead
+  // of a plain fetch. Requires LIGHTPANDA_API_TOKEN to be set. Use for React/Angular SPAs that
+  // return an empty shell without JavaScript execution.
+  jsRendering: z.boolean().optional(),
   detailSelectors: detailSelectorsSchema,
 });
 

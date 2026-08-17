@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getDashboardStats } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
+import { RunTickButton } from "@/components/admin/RunTickButton";
 import { StatTile } from "@/components/admin/StatTile";
 
 export const metadata: Metadata = { title: "Admin — Dashboard" };
@@ -12,7 +13,10 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-title font-semibold">Ingestion dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-title font-semibold">Ingestion dashboard</h1>
+        <RunTickButton />
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Active sources" value={stats.activeSources} />
