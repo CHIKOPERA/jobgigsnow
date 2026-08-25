@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LinkButton } from "@/components/ui/Button";
+import { ContentAd } from "@/components/ads/ContentAd";
+import { site } from "@/config";
 import { courseDetailSelect, toCourseDetail } from "@/lib/course-dto";
 import { prisma } from "@/lib/prisma";
 
@@ -21,7 +23,17 @@ async function getCourse(slug: string) {
 export async function generateMetadata({ params }: CoursePageProps): Promise<Metadata> {
   const { slug } = await params;
   const course = await getCourse(slug);
-  return { title: course ? `${course.title} — ${course.provider}` : "Course not found" };
+  if (!course) return { title: "Course not found", robots: { index: false, follow: false } };
+
+  const title = `${course.title} — ${course.provider}`;
+  const description = course.description.replace(/\s+/g, " ").slice(0, 155);
+  const url = `${site.url.replace(/\/$/, "")}/courses/${slug}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: { type: "website", title, description, url, siteName: site.name },
+  };
 }
 
 export default async function CoursePage({ params }: CoursePageProps) {
@@ -58,6 +70,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
           </LinkButton>
         </div>
       </article>
+      <ContentAd kind="course" pageKey={slug} text={course.description} />
     </div>
   );
 }

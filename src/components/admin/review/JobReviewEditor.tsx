@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { hasRequiredSocialImage } from "@/lib/ingest/review-policy";
 
 const DEFAULT_PROMPT =
   "Rewrite this job description in clear, welcoming South African English. Keep every factual requirement and remove repetition. Use short sections and useful bullet points. Do not invent salary, benefits, dates, or requirements.";
@@ -234,6 +235,7 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
   }
 
   const fieldClass = "focus-ring mt-1.5 h-11 w-full rounded-md border border-line bg-surface px-3 text-meta";
+  const canPublish = hasRequiredSocialImage(socialImage.url);
 
   return (
     <div className="flex flex-col gap-6">
@@ -341,10 +343,13 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
           <button type="button" onClick={() => save("READY")} disabled={busy !== null} className="focus-ring h-11 rounded-pill border border-line-strong bg-surface px-4 text-meta font-semibold disabled:opacity-50">
             {busy === "save" ? "Saving…" : "Save draft"}
           </button>
-          <button type="button" onClick={() => save("PUBLISHED")} disabled={busy !== null} className="focus-ring h-11 rounded-pill bg-ink px-4 text-meta font-semibold text-surface disabled:opacity-50">
+          <button type="button" onClick={() => save("PUBLISHED")} disabled={busy !== null || !canPublish} className="focus-ring h-11 rounded-pill bg-ink px-4 text-meta font-semibold text-surface disabled:opacity-50">
             {busy === "publish" ? "Publishing…" : "Publish"}
           </button>
         </div>
+        {!canPublish && (
+          <p className="text-center text-[12px] text-ink-muted">Choose a social preview image below before publishing.</p>
+        )}
         <button type="button" onClick={() => save("REJECTED")} disabled={busy !== null} className="focus-ring h-10 rounded-pill text-meta font-medium text-danger hover:bg-danger/10 disabled:opacity-50">
           {busy === "reject" ? "Rejecting…" : "Reject listing"}
         </button>

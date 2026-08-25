@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
+import { site } from "@/config";
 import { CourseCard } from "@/components/content/CourseCard";
 import { fetchCoursePage } from "@/lib/course-query";
+import { prisma } from "@/lib/prisma";
 import { courseListQuerySchema } from "@/lib/validation/course";
 
-export const metadata: Metadata = { title: "Online courses" };
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const publishedCount = await prisma.course.count({ where: { published: true } });
+  return {
+    title: "Online courses",
+    description: "Explore selected online courses that can help you build practical, job-relevant skills.",
+    alternates: { canonical: `${site.url.replace(/\/$/, "")}/courses` },
+    robots: { index: publishedCount > 0, follow: true },
+  };
+}
 
 export default async function CoursesPage() {
   const { courses } = await fetchCoursePage(courseListQuerySchema.parse({}));

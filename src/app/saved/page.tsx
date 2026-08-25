@@ -6,7 +6,10 @@ import { jobCardSelect, toJobCard } from "@/lib/dto";
 import { pagination } from "@/config/pagination";
 import { prisma } from "@/lib/prisma";
 
-export const metadata: Metadata = { title: "Saved jobs" };
+export const metadata: Metadata = {
+  title: "Saved jobs",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 export default async function SavedJobsPage() {

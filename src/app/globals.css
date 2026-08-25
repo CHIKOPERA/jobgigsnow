@@ -168,3 +168,31 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.info-content h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.65rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.info-content p,
+.info-content ul {
+  margin-block: 0.85rem;
+}
+
+.info-content ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+
+.info-content li {
+  margin-block: 0.35rem;
+}
+
+.info-content a {
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

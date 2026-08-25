@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { SignInButton } from "@clerk/nextjs";
 import { requireAdmin } from "@/lib/admin-auth";
 import { AdminNav } from "@/components/admin/AdminNav";
+
+export const metadata: Metadata = {
+  title: "Administration",
+  robots: { index: false, follow: false },
+};
 
 /**
  * Guards every /admin/** page. This does NOT protect /api/admin/** route handlers — Next layouts

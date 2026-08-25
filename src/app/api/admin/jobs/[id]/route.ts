@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireAdmin, adminAuthErrorResponse } from "@/lib/admin-auth";
 import { getReviewJob } from "@/lib/ingest/admin-query";
+import { hasRequiredSocialImage } from "@/lib/ingest/review-policy";
 import { sanitizeJobDescription } from "@/lib/job-rich-text";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
@@ -22,8 +23,18 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
   try {
     const { id } = await ctx.params;
     const body = jobReviewPatchSchema.parse(await request.json());
-    const existing = await prisma.job.findUnique({ where: { id }, select: { id: true, postedAt: true } });
+    const existing = await prisma.job.findUnique({
+      where: { id },
+      select: { id: true, postedAt: true, socialImageUrl: true },
+    });
     if (!existing) return errorResponse("NOT_FOUND", "Job not found.", 404);
+    if (body.status === "PUBLISHED" && !hasRequiredSocialImage(existing.socialImageUrl)) {
+      return errorResponse(
+        "SOCIAL_IMAGE_REQUIRED",
+        "Choose and save a social preview image before publishing this job.",
+        409,
+      );
+    }
 
     const description = body.description ? sanitizeJobDescription(body.description) : undefined;
     if (body.description && !description) {

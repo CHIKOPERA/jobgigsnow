@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import type { JobUpsertInput } from "@/lib/validation/ingest";
 import { buildNormalizedFields } from "./normalize-fields";
+import { aggregatedJobStatus } from "./review-policy";
 import type { AggregationResult } from "./types";
 
 export type NormalizeResult = { ok: true; input: JobUpsertInput } | { ok: false; missingFields: string[] };
@@ -45,7 +46,7 @@ export async function normalize(
       highlights: [],
       ...built.fields,
       isNative: false,
-      status: "PUBLISHED",
+      status: aggregatedJobStatus,
     },
   };
 }

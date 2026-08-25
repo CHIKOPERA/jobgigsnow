@@ -1,14 +1,28 @@
 import type { Metadata } from "next";
+import { site } from "@/config";
 import { contentCategories } from "@/config/categories";
 import { ArticleCard } from "@/components/content/ArticleCard";
 import { fetchArticlePage } from "@/lib/article-query";
+import { prisma } from "@/lib/prisma";
 import { articleListQuerySchema } from "@/lib/validation/article";
 
-export const metadata: Metadata = { title: "Articles & guides" };
 export const dynamic = "force-dynamic";
 
 interface ArticlesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export async function generateMetadata({ searchParams }: ArticlesPageProps): Promise<Metadata> {
+  const raw = await searchParams;
+  const isFiltered = typeof raw.category === "string" && raw.category.length > 0;
+  const publishedCount = await prisma.article.count({ where: { published: true } });
+
+  return {
+    title: "Articles & guides",
+    description: "Original, practical guidance for finding work, applying well and building your career.",
+    alternates: { canonical: `${site.url.replace(/\/$/, "")}/articles` },
+    robots: { index: !isFiltered && publishedCount > 0, follow: true },
+  };
 }
 
 export default async function ArticlesPage({ searchParams }: ArticlesPageProps) {

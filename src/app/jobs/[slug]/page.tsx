@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { JobDetail } from "@/components/job/JobDetail";
+import { ContentAd } from "@/components/ads/ContentAd";
 import { jobDetailSelect, toJobDetail } from "@/lib/dto";
 import { prisma } from "@/lib/prisma";
 import { getSavedJobIds } from "@/lib/saved";
@@ -33,7 +34,7 @@ async function getJob(slug: string) {
 export async function generateMetadata({ params }: JobPageProps): Promise<Metadata> {
   const { slug } = await params;
   const job = await getJob(slug);
-  if (!job) return { title: "Job not found" };
+  if (!job) return { title: "Job not found", robots: { index: false, follow: false } };
   const title = `${job.detail.title} at ${job.detail.companyName}`;
   const description = `${job.detail.title} opportunity at ${job.detail.companyName} in ${job.detail.location}. View the details and apply on JobGigsNow.`;
   const url = `${site.url.replace(/\/$/, "")}/jobs/${slug}`;
@@ -64,7 +65,12 @@ export default async function JobPage({ params, searchParams }: JobPageProps) {
     <JobsShell
       searchParams={await searchParams}
       activeSlug={slug}
-      detail={<JobDetail job={job.detail} saved={savedJobIds.has(job.detail.id)} />}
+      detail={
+        <div>
+          <JobDetail job={job.detail} saved={savedJobIds.has(job.detail.id)} />
+          <ContentAd kind="job" pageKey={slug} text={job.detail.description} />
+        </div>
+      }
     />
   );
 }

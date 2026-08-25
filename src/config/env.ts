@@ -13,6 +13,13 @@ const envSchema = z.object({
 
   NEXT_PUBLIC_SITE_URL: z.url().default("http://localhost:3000"),
 
+  CONTACT_EMAIL: z.email().default("contact@jobgigsnow.co.za"),
+
+  ADSENSE_CLIENT_ID: z.string().regex(/^ca-pub-\d+$/).default("ca-pub-4285411663423178"),
+  ADSENSE_JOB_SLOT: z.string().regex(/^\d+$/).optional(),
+  ADSENSE_ARTICLE_SLOT: z.string().regex(/^\d+$/).optional(),
+  ADSENSE_COURSE_SLOT: z.string().regex(/^\d+$/).optional(),
+
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required"),
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
 
