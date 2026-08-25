@@ -11,6 +11,7 @@ const PLACEHOLDERS = [
   ["{{employmentType}}", "FULL_TIME / PART_TIME / etc."],
   ["{{description}}", "Current (pre-rewrite) description"],
   ["{{tags}}", "Current tags, comma-separated"],
+  ["{{applyUrl}}", "Original application URL"],
 ] as const;
 
 export function SettingsForm({ initialPrompt }: { initialPrompt: string }) {

@@ -29,6 +29,7 @@ function origin(host: string) {
 
 export async function discoverOracle(config: OracleConfig, fetcher: typeof fetch = fetch): Promise<string[]> {
   const links = new Set<string>();
+  let knownTotal: number | null = null;
   for (let page = 0; page < config.maxPages; page++) {
     const offset = page * config.pageSize;
     const endpoint = new URL("/hcmRestApi/resources/latest/recruitingCEJobRequisitions", origin(config.host));
@@ -42,13 +43,16 @@ export async function discoverOracle(config: OracleConfig, fetcher: typeof fetch
     if (!res.ok) throw new Error(`Oracle Recruiting returned HTTP ${res.status}`);
     const data = (await res.json()) as OracleSearchResponse;
     const search = data.items?.[0];
+    if (typeof search?.TotalJobsCount === "number" && search.TotalJobsCount > 0) {
+      knownTotal = search.TotalJobsCount;
+    }
     const postings = search?.requisitionList ?? [];
     for (const posting of postings) {
       if (posting.Id) {
         links.add(`${origin(config.host)}/hcmUI/CandidateExperience/${config.language}/sites/${config.siteNumber}/job/${posting.Id}`);
       }
     }
-    if (postings.length < config.pageSize || offset + postings.length >= (search?.TotalJobsCount ?? 0)) break;
+    if (postings.length < config.pageSize || (knownTotal !== null && offset + postings.length >= knownTotal)) break;
   }
   return [...links];
 }

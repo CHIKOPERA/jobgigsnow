@@ -28,6 +28,7 @@ function origin(host: string) {
 export async function discoverWorkday(config: WorkdayConfig, fetcher: typeof fetch = fetch): Promise<string[]> {
   const links = new Set<string>();
   const endpoint = `${origin(config.host)}/wday/cxs/${config.tenant}/${config.site}/jobs`;
+  let knownTotal: number | null = null;
   for (let page = 0; page < config.maxPages; page++) {
     const offset = page * config.pageSize;
     const res = await fetcher(endpoint, {
@@ -37,11 +38,12 @@ export async function discoverWorkday(config: WorkdayConfig, fetcher: typeof fet
     });
     if (!res.ok) throw new Error(`Workday returned HTTP ${res.status}`);
     const data = (await res.json()) as WorkdaySearchResponse;
+    if (typeof data.total === "number" && data.total > 0) knownTotal = data.total;
     const postings = data.jobPostings ?? [];
     for (const posting of postings) {
       if (posting.externalPath) links.add(`${origin(config.host)}/${config.site}${posting.externalPath}`);
     }
-    if (postings.length < config.pageSize || offset + postings.length >= (data.total ?? 0)) break;
+    if (postings.length < config.pageSize || (knownTotal !== null && offset + postings.length >= knownTotal)) break;
   }
   return [...links];
 }

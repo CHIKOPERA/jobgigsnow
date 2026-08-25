@@ -20,8 +20,10 @@ export function QuickCrawlForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      const payload = await response.json();
+      let payload: { ingestRunId?: string; error?: { message?: string } } = {};
+      try { payload = await response.json(); } catch { /* non-JSON body */ }
       if (!response.ok) throw new Error(payload?.error?.message ?? "The crawl could not be started.");
+      if (!payload.ingestRunId) throw new Error("The crawl could not be started.");
       router.push(`/admin/runs/${payload.ingestRunId}`);
       router.refresh();
     } catch (err) {

@@ -3,7 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { getAiModel } from "./ai-model";
 import { sanitizeJobDescription } from "@/lib/job-rich-text";
-import { renderSeoRewritePrompt, type SeoRewriteContext } from "./seo-rewrite-prompt";
+import { buildSeoRewritePrompt, seoRewriteGroundingError, type SeoRewriteContext } from "./seo-rewrite-prompt";
 import { getSeoRewritePrompt } from "./settings";
 
 const seoOutputSchema = z.object({
@@ -35,7 +35,7 @@ const SYSTEM_PROMPT =
  */
 export async function seoRewrite(ctx: SeoRewriteContext): Promise<SeoRewriteOutcome> {
   const template = await getSeoRewritePrompt();
-  const prompt = renderSeoRewritePrompt(template, ctx);
+  const prompt = buildSeoRewritePrompt(template, ctx);
 
   const { output, usage } = await generateText({
     model: getAiModel(),
@@ -43,6 +43,9 @@ export async function seoRewrite(ctx: SeoRewriteContext): Promise<SeoRewriteOutc
     prompt,
     output: Output.object({ schema: seoOutputSchema }),
   });
+
+  const groundingError = seoRewriteGroundingError(ctx, output);
+  if (groundingError) throw new Error(groundingError);
 
   const description = sanitizeJobDescription(output.descriptionHtml);
   if (!description) throw new Error("The SEO rewrite returned an empty description.");

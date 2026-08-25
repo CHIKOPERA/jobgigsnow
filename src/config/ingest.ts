@@ -11,10 +11,13 @@ export const ingest = {
   // Cron tick batching (Section G) — every value here bounds one /api/cron/tick invocation.
   // Budget is set well within the 300s maxDuration so the function always returns cleanly.
   tickTimeBudgetMs: 240_000,
-  discoveryPerTick: 10,
+  discoveryPerTick: 3,
   acquisitionPerTick: 40,
   acquisitionConcurrency: 8,
-  aggregationPerTick: 10,
+  // Each row makes an aggregation call and an SEO call. Two concurrent rows keep the stage
+  // inside the function window while preserving materially better throughput than sequential AI.
+  aggregationPerTick: 2,
+  aggregationConcurrency: 2,
 
   // How long a claimed-but-not-finished row (FETCHING / aggregationClaimedAt) is considered
   // abandoned and eligible for another tick to reclaim.

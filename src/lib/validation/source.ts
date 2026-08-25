@@ -17,6 +17,8 @@ const detailSelectorsSchema = z
   })
   .optional();
 
+const fetchTimeoutMsSchema = z.number().int().min(1_000).max(120_000).optional();
+
 const htmlCrawlConfigSchema = z.object({
   // Optional/defaulted for backward compatibility with sources created before providers existed.
   provider: z.literal("html").default("html"),
@@ -40,6 +42,8 @@ const htmlCrawlConfigSchema = z.object({
   // of a plain fetch. Requires LIGHTPANDA_API_TOKEN to be set. Use for React/Angular SPAs that
   // return an empty shell without JavaScript execution.
   jsRendering: z.boolean().optional(),
+  // Optional override for unusually slow listing/detail endpoints.
+  fetchTimeoutMs: fetchTimeoutMsSchema,
   detailSelectors: detailSelectorsSchema,
 });
 
@@ -48,6 +52,7 @@ const smartRecruitersCrawlConfigSchema = z.object({
   companyIdentifier: z.string().min(1),
   pageSize: z.number().int().positive().max(100).default(100),
   maxPages: z.number().int().positive().max(50).default(10),
+  fetchTimeoutMs: fetchTimeoutMsSchema,
   detailSelectors: detailSelectorsSchema,
 });
 
@@ -58,6 +63,7 @@ const workdayCrawlConfigSchema = z.object({
   site: z.string().min(1),
   pageSize: z.number().int().positive().max(100).default(100),
   maxPages: z.number().int().positive().max(50).default(10),
+  fetchTimeoutMs: fetchTimeoutMsSchema,
   detailSelectors: detailSelectorsSchema,
 });
 
@@ -69,6 +75,7 @@ const oracleCrawlConfigSchema = z.object({
   language: z.string().min(1).default("en"),
   pageSize: z.number().int().positive().max(100).default(100),
   maxPages: z.number().int().positive().max(50).default(10),
+  fetchTimeoutMs: fetchTimeoutMsSchema,
   detailSelectors: detailSelectorsSchema,
 });
 
@@ -80,6 +87,7 @@ const cornerstoneCrawlConfigSchema = z.object({
   companyName: z.string().min(1),
   pageSize: z.number().int().positive().max(100).default(100),
   maxPages: z.number().int().positive().max(50).default(10),
+  fetchTimeoutMs: fetchTimeoutMsSchema,
   detailSelectors: detailSelectorsSchema,
 });
 

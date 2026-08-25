@@ -57,9 +57,8 @@ the Backend API: `PATCH https://api.clerk.com/v1/users/{id}` with `CLERK_SECRET_
   existing `/api/ingest/queue` endpoint already accepts for concurrent workers). The
   `FETCHING`/`aggregationClaimedAt` staleness windows shrink the collision cost to "one wasted AI
   call," not a correctness bug.
-- **New jobs land at `Job.status = "READY"`, not `"PUBLISHED"`** — a safety default for a new
-  automated pipeline. Promote via the already-documented `GET /api/ingest/queue?stage=posting`
-  flow. One line to change if full auto-publish is wanted instead.
+- **Successful crawls auto-publish** (`Job.status = "PUBLISHED"`) — both first ingestion and later
+  content changes upsert the same RawJob-linked Job, so the public listing is updated in place.
 - **AI structured-output schema constraint worth remembering**: providers cap how many
   nullable/union-typed parameters one schema can have (Anthropic's structured output hit this at
   ~16). Prefer named non-nullable fields with a sentinel value (e.g. confidence `0` meaning "no

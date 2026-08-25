@@ -11,7 +11,7 @@ import { extractJsonLd, jsonLdToCandidates } from "./extractors/jsonld";
 import { extractMarkdown } from "./extractors/markdown";
 import { extractReadable, readabilityToCandidates } from "./extractors/readability";
 import { extractMetadata, extractSelectorFields } from "./extractors/selectors";
-import { hashReconciledFields } from "./hash";
+import { hashAggregationInput } from "./hash";
 import { upsertJob } from "./job-service";
 import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
@@ -127,7 +127,8 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
     const markdown = extractMarkdown(html);
 
     const reconciled = reconcile(jsonLdToCandidates(jsonLdPostings), selectorCandidates, readabilityToCandidates(readable));
-    const newHash = hashReconciledFields(reconciled);
+    const aggregationContext = markdown ?? readable.text;
+    const newHash = hashAggregationInput(reconciled, aggregationContext);
     const isFirstFetch = row.contentHash === "";
     const changed = isFirstFetch || newHash !== row.contentHash;
     const canonicalUrl = metadata.canonicalUrl ?? acquired.redirectedUrl ?? null;
@@ -157,6 +158,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
         httpStatus: acquired.httpStatus,
         canonicalUrl,
         lastCrawledAt: new Date(),
+        lastChangedAt: changed ? new Date() : undefined,
         // undefined (not false) when unchanged — leaves whatever needsAggregation already was,
         // which is exactly "skip unchanged": a row already fully aggregated stays that way.
         needsAggregation: changed ? true : undefined,
@@ -276,6 +278,7 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
           employmentType: normalized.input.employmentType,
           description: normalized.input.description,
           tags: normalized.input.tags,
+          applyUrl: normalized.input.applyUrl ?? null,
         });
         normalized.input.title = seoOutcome.title;
         normalized.input.description = seoOutcome.description;
@@ -363,11 +366,7 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
 
 async function drainAggregation(): Promise<number> {
   const candidates = await claimAggregationCandidates(ingest.aggregationPerTick);
-  for (const row of candidates) {
-    // Sequential, not concurrent — each item is one AI call; running them in parallel wouldn't
-    // meaningfully speed up an external API call and would just spike concurrent spend.
-    await processAggregation(row);
-  }
+  await runWithConcurrency(candidates, ingest.aggregationConcurrency, processAggregation);
   return candidates.length;
 }
 
@@ -413,8 +412,11 @@ export interface TickResult {
 export async function runTick(): Promise<TickResult> {
   const startedAt = Date.now();
 
-  const discoveryRunIds = timeBudget(startedAt) ? await runDiscoveryIfDue() : [];
+  // Drain durable fetch backlog first, then discover a small bounded set of fresh work before the
+  // slower AI stage. This prevents either multi-page discovery or AI calls from starving the
+  // other stages across repeated ticks.
   const acquisitionProcessed = timeBudget(startedAt) ? await drainAcquisition() : 0;
+  const discoveryRunIds = timeBudget(startedAt) ? await runDiscoveryIfDue() : [];
   const aggregationProcessed = timeBudget(startedAt) ? await drainAggregation() : 0;
 
   return {

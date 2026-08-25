@@ -382,7 +382,7 @@ model Course {
 model AdminSetting {
   id               String   @id @default("singleton")
   /// Template used by the automatic post-aggregation SEO rewrite stage (src/lib/ingest/seo-rewrite.ts).
-  /// Supports {{title}}/{{company}}/{{location}}/{{remoteType}}/{{employmentType}}/{{description}}/{{tags}}
+  /// Supports {{title}}/{{company}}/{{location}}/{{remoteType}}/{{employmentType}}/{{description}}/{{tags}}/{{applyUrl}}
   /// placeholders. Falls back to DEFAULT_SEO_REWRITE_PROMPT (src/lib/ingest/settings.ts) if no row exists.
   seoRewritePrompt String
   updatedAt        DateTime @updatedAt

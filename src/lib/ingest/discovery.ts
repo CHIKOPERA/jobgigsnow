@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { ingest } from "@/config/ingest";
 import { sources as sourcesConfig } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
-import { diffDiscoveredUrls, extractListingLinks, findNextPageUrl } from "./discovery-diff";
+import {
+  diffDiscoveredUrls,
+  extractLikelyJobLinks,
+  extractListingLinks,
+  findNextPageUrl,
+  isSuspiciousEmptyDiscovery,
+} from "./discovery-diff";
 import { isAllowedByRobots } from "./robots";
 import { failRun, finalizeRunIfComplete, incrementRunCounters, recordFailure, startIngestRun } from "./run-tracking";
 import { buildSmartRecruitersPageUrl, parseSmartRecruitersPage } from "./smartrecruiters";
@@ -11,25 +17,25 @@ import { discoverCornerstone } from "./cornerstone";
 import { discoverOracle } from "./oracle";
 import { discoverWorkday } from "./workday";
 
-async function fetchListingPage(url: string): Promise<string> {
+async function fetchListingPage(url: string, timeoutMs: number): Promise<string> {
   if (!(await isAllowedByRobots(url))) {
     throw new Error(`Disallowed by robots.txt: ${url}`);
   }
   const res = await fetch(url, {
     headers: { "user-agent": sourcesConfig.defaultUserAgent },
-    signal: AbortSignal.timeout(sourcesConfig.defaultFetchTimeoutMs),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`Listing page returned HTTP ${res.status}`);
   return res.text();
 }
 
-async function fetchSmartRecruitersPage(url: string): Promise<unknown> {
+async function fetchSmartRecruitersPage(url: string, timeoutMs: number): Promise<unknown> {
   if (!(await isAllowedByRobots(url))) {
     throw new Error(`Disallowed by robots.txt: ${url}`);
   }
   const res = await fetch(url, {
     headers: { accept: "application/json", "user-agent": sourcesConfig.defaultUserAgent },
-    signal: AbortSignal.timeout(sourcesConfig.defaultFetchTimeoutMs),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`SmartRecruiters returned HTTP ${res.status}`);
   return res.json();
@@ -55,6 +61,7 @@ async function crawlAllListings(
 ): Promise<string[]> {
   const allLinks = new Set<string>();
   let anySucceeded = false;
+  const timeoutMs = config.fetchTimeoutMs ?? sourcesConfig.defaultFetchTimeoutMs;
 
   for (const startUrl of config.listingUrls) {
     try {
@@ -65,8 +72,10 @@ async function crawlAllListings(
 
       while (pageUrl && pageCount < maxPages && !visited.has(pageUrl)) {
         visited.add(pageUrl);
-        const html = await fetchListingPage(pageUrl);
-        for (const link of extractListingLinks(html, pageUrl, config)) allLinks.add(link);
+        const html = await fetchListingPage(pageUrl, timeoutMs);
+        const configuredLinks = extractListingLinks(html, pageUrl, config);
+        const pageLinks = configuredLinks.length > 0 ? configuredLinks : extractLikelyJobLinks(html, pageUrl);
+        for (const link of pageLinks) allLinks.add(link);
 
         pageCount += 1;
         pageUrl = config.pagination ? findNextPageUrl(html, pageUrl, config.pagination.nextPageSelector) : null;
@@ -89,11 +98,15 @@ async function crawlSmartRecruiters(
 ): Promise<string[]> {
   const links = new Set<string>();
   let offset = 0;
+  const timeoutMs = config.fetchTimeoutMs ?? sourcesConfig.defaultFetchTimeoutMs;
 
   for (let page = 0; page < config.maxPages; page++) {
     const endpoint = buildSmartRecruitersPageUrl(config.companyIdentifier, config.pageSize, offset);
     try {
-      const parsed = parseSmartRecruitersPage(await fetchSmartRecruitersPage(endpoint), config.companyIdentifier);
+      const parsed = parseSmartRecruitersPage(
+        await fetchSmartRecruitersPage(endpoint, timeoutMs),
+        config.companyIdentifier,
+      );
       for (const posting of parsed.postings) links.add(posting.postingUrl);
 
       offset += parsed.postings.length;
@@ -113,15 +126,22 @@ async function discoverLiveUrls(
   config: CrawlConfig,
   onListingError: (url: string, message: string) => void,
 ): Promise<string[]> {
+  const timeoutMs = config.fetchTimeoutMs ?? sourcesConfig.defaultFetchTimeoutMs;
+  const atsFetcher: typeof fetch = (input, init) =>
+    fetchAts(input, {
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+
   switch (config.provider) {
     case "smartrecruiters":
       return crawlSmartRecruiters(config, onListingError);
     case "workday":
-      return discoverWorkday(config, fetchAts);
+      return discoverWorkday(config, atsFetcher);
     case "oracle":
-      return discoverOracle(config, fetchAts);
+      return discoverOracle(config, atsFetcher);
     case "cornerstone":
-      return discoverCornerstone(config, fetchAts);
+      return discoverCornerstone(config, atsFetcher);
     case "html":
       return crawlAllListings(config, onListingError);
   }
@@ -163,6 +183,18 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
       where: { sourceId, active: true },
       select: { id: true, externalId: true, externalUrl: true },
     });
+
+    if (
+      isSuspiciousEmptyDiscovery(
+        liveUrls.length,
+        previouslyActive.length,
+        sourcesConfig.zeroResultSafetyMinPreviousJobs,
+      )
+    ) {
+      throw new Error(
+        `Discovery returned zero URLs for a source with ${previouslyActive.length} active jobs; preserving existing jobs.`,
+      );
+    }
 
     const diff = diffDiscoveredUrls(liveUrls, previouslyActive);
 

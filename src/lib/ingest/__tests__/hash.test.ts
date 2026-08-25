@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hashReconciledFields } from "../hash";
+import { hashAggregationInput, hashReconciledFields } from "../hash";
 import type { ReconciledFields } from "../types";
 
 function fields(overrides: Partial<Record<keyof ReconciledFields, string>> = {}): ReconciledFields {
@@ -42,4 +42,18 @@ test("does not collide across an obviously different job", () => {
   const a = hashReconciledFields(fields({ title: "Forklift Operator", location: "Austin, TX" }));
   const b = hashReconciledFields(fields({ title: "Warehouse Associate", location: "Dallas, TX" }));
   assert.notEqual(a, b);
+});
+
+test("aggregation hash changes when AI-visible page context changes", () => {
+  const reconciled = fields({ title: "Forklift Operator" });
+  const before = hashAggregationInput(reconciled, "Applications close 1 September.");
+  const after = hashAggregationInput(reconciled, "Applications close 15 September.");
+  assert.notEqual(before, after);
+});
+
+test("aggregation hash ignores context-only whitespace changes", () => {
+  const reconciled = fields({ title: "Forklift Operator" });
+  const compact = hashAggregationInput(reconciled, "Applications close 1 September.");
+  const spaced = hashAggregationInput(reconciled, " Applications\n  close 1 September. ");
+  assert.equal(compact, spaced);
 });

@@ -20,4 +20,9 @@ export const sources = {
   // Hard ceiling on pages acquired for one source within a single discovery cycle's lifetime —
   // a circuit breaker against a misconfigured crawlConfig running away.
   maxPagesPerRun: 500,
+
+  // Treat a sudden zero-result pass as a discovery failure when an established source still has
+  // at least this many active rows. This prevents a broken selector/page redesign from closing
+  // an entire source after the normal missing-run threshold.
+  zeroResultSafetyMinPreviousJobs: 5,
 } as const;

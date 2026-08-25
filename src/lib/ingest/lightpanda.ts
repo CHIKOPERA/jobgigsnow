@@ -19,7 +19,10 @@ export function isLightpandaConfigured(): boolean {
  *
  * Docs: https://lightpanda.io/docs/usage/api
  */
-export async function fetchWithLightpanda(url: string): Promise<{ html: string; httpStatus: number }> {
+export async function fetchWithLightpanda(
+  url: string,
+  timeoutMs = 30_000,
+): Promise<{ html: string; httpStatus: number }> {
   if (!env.LIGHTPANDA_API_TOKEN) throw new Error("LIGHTPANDA_API_TOKEN is not set.");
 
   const res = await fetch("https://euwest.cloud.lightpanda.io/api/fetch", {
@@ -29,8 +32,7 @@ export async function fetchWithLightpanda(url: string): Promise<{ html: string; 
       Authorization: `Bearer ${env.LIGHTPANDA_API_TOKEN}`,
     },
     body: JSON.stringify({ url, output_format: "html", wait_event: "networkIdle" }),
-    // JS rendering + network idle can take a while; allow 30s.
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) throw new Error(`Lightpanda Cloud returned HTTP ${res.status}`);

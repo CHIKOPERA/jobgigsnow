@@ -34,16 +34,21 @@ function escapeHtml(value: string): string {
 }
 
 async function pdfToHtml(data: ArrayBuffer, sourceUrl: string): Promise<string> {
+  let parser: { destroy(): Promise<void> } | null = null;
   try {
     // Dynamic import so pdfjs-dist@5's module-init code (which references browser globals like
     // DOMMatrix) is only evaluated when a PDF is actually encountered, not at route startup.
     // If the native canvas polyfill is absent the import rejects — we fall back to a stub that
     // still captures the apply URL so the AI aggregation step can record the listing.
-    const { default: PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse(Buffer.from(data));
-    return `<!doctype html><html><body><main><article><pre>${escapeHtml(parser.text)}</pre></article></main></body></html>`;
+    const { PDFParse } = await import("pdf-parse");
+    const pdfParser = new PDFParse({ data: Buffer.from(data) });
+    parser = pdfParser;
+    const result = await pdfParser.getText();
+    return `<!doctype html><html><body><main><article><pre>${escapeHtml(result.text)}</pre></article></main></body></html>`;
   } catch {
     return `<!doctype html><html><body><main><article><p>PDF document — <a href="${escapeHtml(sourceUrl)}">${escapeHtml(sourceUrl)}</a></p></article></main></body></html>`;
+  } finally {
+    await parser?.destroy().catch(() => undefined);
   }
 }
 
@@ -94,17 +99,23 @@ async function acquireSmartRecruiters(url: URL, fetcher: typeof fetch = fetch): 
 
 async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<AcquisitionResult> {
   let lastError: unknown;
+  const timeoutMs = config?.fetchTimeoutMs ?? sources.defaultFetchTimeoutMs;
+  const atsFetcher: typeof fetch = (input, init) =>
+    fetchAts(input, {
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+    });
   for (let attempt = 0; attempt <= sources.fetchMaxRetries; attempt++) {
     try {
       const parsedUrl = new URL(url);
       let atsHtml: string | null = null;
-      if (isWorkdayJobUrl(parsedUrl)) atsHtml = await acquireWorkday(parsedUrl, fetchAts);
+      if (isWorkdayJobUrl(parsedUrl)) atsHtml = await acquireWorkday(parsedUrl, atsFetcher);
       else if (isOracleJobUrl(parsedUrl) && config?.provider === "oracle") {
-        atsHtml = await acquireOracle(parsedUrl, config.companyName, fetchAts);
+        atsHtml = await acquireOracle(parsedUrl, config.companyName, atsFetcher);
       } else if (config?.provider === "cornerstone" && /\/requisition\//.test(parsedUrl.pathname)) {
-        atsHtml = await acquireCornerstone(parsedUrl, config, fetchAts);
+        atsHtml = await acquireCornerstone(parsedUrl, config, atsFetcher);
       } else if (isSmartRecruitersJobUrl(parsedUrl)) {
-        atsHtml = await acquireSmartRecruiters(parsedUrl, fetchAts);
+        atsHtml = await acquireSmartRecruiters(parsedUrl, atsFetcher);
       }
       if (atsHtml != null) {
         const truncated = atsHtml.length > sources.maxHtmlBytes;
@@ -119,7 +130,7 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
 
       // JS-rendered HTML: use Lightpanda Cloud if the source opts in and a token is set.
       if (config?.provider === "html" && config.jsRendering && isLightpandaConfigured()) {
-        const { html, httpStatus } = await fetchWithLightpanda(url);
+        const { html, httpStatus } = await fetchWithLightpanda(url, timeoutMs);
         const truncated = html.length > sources.maxHtmlBytes;
         return {
           html: truncated ? html.slice(0, sources.maxHtmlBytes) : html,
@@ -132,9 +143,10 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
 
       const res = await fetch(url, {
         headers: { "user-agent": sources.defaultUserAgent },
-        signal: AbortSignal.timeout(sources.defaultFetchTimeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: "follow",
       });
+      if (!res.ok) throw new Error(`Detail page returned HTTP ${res.status}`);
       const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
       const html = contentType.includes("application/pdf") || parsedUrl.pathname.toLowerCase().endsWith(".pdf")
         ? await pdfToHtml(await res.arrayBuffer(), url)

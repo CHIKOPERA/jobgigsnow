@@ -31,7 +31,6 @@ export const careerSources: CreateSourceInput[] = [
       listingUrls: ["https://jobs.sasol.com/search/?createNewAlert=false&q=&optionsFacetsDD_customfield4=&optionsFacetsDD_customfield2=&optionsFacetsDD_customfield3="],
       linkSelector: "a.jobTitle-link",
       linkAttr: "href",
-      pagination: successFactorsPagination,
     },
   },
   {
@@ -283,6 +282,7 @@ export const careerSources: CreateSourceInput[] = [
       listingUrls: ["https://careers.mediclinic.com/SouthernAfrica/go/Search-By-Keyword-MCSA/5071601/"],
       linkSelector: "a.jobTitle-link",
       linkAttr: "href",
+      fetchTimeoutMs: 45_000,
       pagination: successFactorsPagination,
     },
   },

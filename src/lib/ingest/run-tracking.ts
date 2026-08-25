@@ -1,5 +1,6 @@
 import "server-only";
 import type { IngestFailureStage, Prisma } from "@/generated/prisma/client";
+import { ingest } from "@/config/ingest";
 import { prisma } from "@/lib/prisma";
 
 export async function startIngestRun(sourceId: string) {
@@ -49,10 +50,19 @@ export async function recordFailure(params: {
 
 /** Marks a run COMPLETED once none of its RawJobs are still awaiting acquisition or aggregation. */
 export async function finalizeRunIfComplete(runId: string) {
+  const recrawlCutoff = new Date(Date.now() - ingest.recrawlAfterMs);
   const outstanding = await prisma.rawJob.count({
     where: {
       ingestRunId: runId,
-      OR: [{ fetchStatus: { in: ["PENDING", "FETCHING"] } }, { needsAggregation: true }],
+      OR: [
+        { fetchStatus: { in: ["PENDING", "FETCHING"] } },
+        { needsAggregation: true },
+        {
+          fetchStatus: "FETCHED",
+          active: true,
+          OR: [{ lastCrawledAt: null }, { lastCrawledAt: { lt: recrawlCutoff } }],
+        },
+      ],
     },
   });
   if (outstanding > 0) return;

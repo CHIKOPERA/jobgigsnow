@@ -12,10 +12,10 @@ export const maxDuration = 300;
 const bodySchema = z.object({ url: z.string().min(1) });
 
 export async function POST(request: Request) {
-  const admin = await requireAdmin();
-  if (!admin.ok) return adminAuthErrorResponse(admin.reason);
-
   try {
+    const admin = await requireAdmin();
+    if (!admin.ok) return adminAuthErrorResponse(admin.reason);
+
     const body = bodySchema.parse(await request.json());
     const url = await assertPublicHttpUrl(body.url);
     const queued = await queueOneOffUrl(url);

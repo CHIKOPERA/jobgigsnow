@@ -12,6 +12,7 @@ Location: {{location}}
 Work arrangement: {{remoteType}}
 Employment type: {{employmentType}}
 Current tags: {{tags}}
+Application URL: {{applyUrl}}
 
 Current description:
 {{description}}

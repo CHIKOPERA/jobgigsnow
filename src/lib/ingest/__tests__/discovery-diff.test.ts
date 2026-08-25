@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diffDiscoveredUrls, extractListingLinks, findNextPageUrl } from "../discovery-diff";
+import {
+  diffDiscoveredUrls,
+  extractLikelyJobLinks,
+  extractListingLinks,
+  findNextPageUrl,
+  isSuspiciousEmptyDiscovery,
+} from "../discovery-diff";
 import type { CrawlConfig } from "@/lib/validation/source";
 
 type HtmlCrawlConfig = Extract<CrawlConfig, { provider: "html" }>;
@@ -59,6 +65,33 @@ test("extractListingLinks skips elements with no href without throwing", () => {
   assert.deepEqual(extractListingLinks(html, LISTING_URL, config()), []);
 });
 
+test("fallback extraction keeps strong job-detail links and excludes broad navigation", () => {
+  const html = `<nav>
+      <a href="/careers">Careers</a>
+      <a href="/jobs">All jobs</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <main>
+      <a href="/job/Johannesburg/Engineer_R123">Engineer</a>
+      <a href="/Jobs/View/8842">Warehouse role</a>
+      <a href="/search?jobid=991">Analyst</a>
+    </main>`;
+
+  assert.deepEqual(extractLikelyJobLinks(html, LISTING_URL).sort(), [
+    "https://example.com/Jobs/View/8842",
+    "https://example.com/job/Johannesburg/Engineer_R123",
+    "https://example.com/search?jobid=991",
+  ]);
+});
+
+test("fallback extraction only accepts PDFs whose surrounding text identifies an opportunity", () => {
+  const html = `<div><a href="/reports/annual-report.pdf">Annual report</a></div>
+    <div>Internship advert <a href="/documents/intake-2026.pdf">Download application</a></div>`;
+  assert.deepEqual(extractLikelyJobLinks(html, LISTING_URL), [
+    "https://example.com/documents/intake-2026.pdf",
+  ]);
+});
+
 test("findNextPageUrl resolves the next-page link relative to the current page", () => {
   const html = `<a class="next" href="/careers?page=2">Next</a>`;
   assert.equal(findNextPageUrl(html, LISTING_URL, "a.next"), "https://example.com/careers?page=2");
@@ -93,4 +126,10 @@ test("diffDiscoveredUrls treats everything as missing when nothing is live", () 
   const diff = diffDiscoveredUrls([], previouslyActive);
   assert.deepEqual(diff.newUrls, []);
   assert.deepEqual(diff.missingRows, previouslyActive);
+});
+
+test("zero-result safety protects established sources but allows genuinely empty new sources", () => {
+  assert.equal(isSuspiciousEmptyDiscovery(0, 25, 5), true);
+  assert.equal(isSuspiciousEmptyDiscovery(0, 4, 5), false);
+  assert.equal(isSuspiciousEmptyDiscovery(1, 25, 5), false);
 });

@@ -90,6 +90,7 @@ export async function discoverCornerstone(config: CornerstoneConfig, fetcher: ty
   const context = await getContext(config, fetcher);
   const endpoint = new URL("rec-job-search/external/jobs", context.endpoints.cloud).toString();
   const links = new Set<string>();
+  let knownTotal: number | null = null;
   for (let page = 1; page <= config.maxPages; page++) {
     const body = {
       careerSiteId: config.siteId,
@@ -112,6 +113,9 @@ export async function discoverCornerstone(config: CornerstoneConfig, fetcher: ty
     const res = await fetcher(endpoint, { method: "POST", headers: authHeaders(context), body: JSON.stringify(body) });
     if (!res.ok) throw new Error(`Cornerstone job search returned HTTP ${res.status}`);
     const data = (await res.json()) as CornerstoneSearchResponse;
+    if (typeof data.data?.totalCount === "number" && data.data.totalCount > 0) {
+      knownTotal = data.data.totalCount;
+    }
     const postings = data.data?.requisitions ?? [];
     for (const posting of postings) {
       if (posting.requisitionId != null) {
@@ -119,7 +123,7 @@ export async function discoverCornerstone(config: CornerstoneConfig, fetcher: ty
       }
     }
     const seen = page * config.pageSize;
-    if (postings.length < config.pageSize || seen >= (data.data?.totalCount ?? 0)) break;
+    if (postings.length < config.pageSize || (knownTotal !== null && seen >= knownTotal)) break;
   }
   return [...links];
 }
