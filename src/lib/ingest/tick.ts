@@ -82,6 +82,7 @@ interface AcquisitionCandidate {
   ingestRunId: string | null;
   contentHash: string;
   source: { crawlConfig: unknown } | null;
+  ingestRun: { status: string } | null;
 }
 
 async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCandidate[]> {
@@ -91,6 +92,8 @@ async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCan
 
   return prisma.rawJob.findMany({
     where: {
+      OR: [{ ingestRunId: null }, { ingestRun: { status: "RUNNING" } }],
+      AND: [{
       OR: [
         { fetchStatus: "PENDING" },
         { fetchStatus: "FETCHING", updatedAt: { lt: staleClaimCutoff } },
@@ -100,14 +103,16 @@ async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCan
           OR: [{ lastCrawledAt: null }, { lastCrawledAt: { lt: recrawlCutoff } }],
         },
       ],
+      }],
     },
     orderBy: { updatedAt: "asc" },
     take: limit,
-    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, source: { select: { crawlConfig: true } } },
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, source: { select: { crawlConfig: true } }, ingestRun: { select: { status: true } } },
   });
 }
 
 async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
+  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return;
   await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FETCHING" } });
 
   try {
@@ -204,6 +209,7 @@ interface AggregationCandidate {
   externalUrl: string;
   ingestRunId: string | null;
   payload: unknown;
+  ingestRun: { status: string } | null;
 }
 
 async function claimAggregationCandidates(limit: number): Promise<AggregationCandidate[]> {
@@ -212,15 +218,19 @@ async function claimAggregationCandidates(limit: number): Promise<AggregationCan
     where: {
       needsAggregation: true,
       fetchStatus: "FETCHED",
-      OR: [{ aggregationClaimedAt: null }, { aggregationClaimedAt: { lt: staleCutoff } }],
+      AND: [
+        { OR: [{ ingestRunId: null }, { ingestRun: { status: "RUNNING" } }] },
+        { OR: [{ aggregationClaimedAt: null }, { aggregationClaimedAt: { lt: staleCutoff } }] },
+      ],
     },
     orderBy: { updatedAt: "asc" },
     take: limit,
-    select: { id: true, externalUrl: true, ingestRunId: true, payload: true },
+    select: { id: true, externalUrl: true, ingestRunId: true, payload: true, ingestRun: { select: { status: true } } },
   });
 }
 
 async function processAggregation(row: AggregationCandidate): Promise<void> {
+  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return;
   await prisma.rawJob.update({ where: { id: row.id }, data: { aggregationClaimedAt: new Date() } });
 
   try {
@@ -376,9 +386,9 @@ async function drainAggregation(): Promise<number> {
 export async function processQueuedRawJob(rawJobId: string): Promise<void> {
   const acquisition = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
-    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, fetchStatus: true, source: { select: { crawlConfig: true } } },
+    select: { id: true, externalUrl: true, sourceId: true, ingestRunId: true, contentHash: true, fetchStatus: true, source: { select: { crawlConfig: true } }, ingestRun: { select: { status: true } } },
   });
-  if (!acquisition) return;
+  if (!acquisition || acquisition.ingestRun?.status === "CANCELLED") return;
 
   if (acquisition.fetchStatus !== "FETCHED") {
     await processAcquisition(acquisition);
@@ -386,7 +396,7 @@ export async function processQueuedRawJob(rawJobId: string): Promise<void> {
 
   const aggregation = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
-    select: { id: true, externalUrl: true, ingestRunId: true, payload: true, fetchStatus: true, needsAggregation: true },
+    select: { id: true, externalUrl: true, ingestRunId: true, payload: true, fetchStatus: true, needsAggregation: true, ingestRun: { select: { status: true } } },
   });
   if (aggregation?.fetchStatus === "FETCHED" && aggregation.needsAggregation) {
     await processAggregation(aggregation);

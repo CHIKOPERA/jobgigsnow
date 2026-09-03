@@ -4,6 +4,7 @@ import { getDashboardStats } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
 import { RunTickButton } from "@/components/admin/RunTickButton";
 import { StatTile } from "@/components/admin/StatTile";
+import { StopRunButton } from "@/components/admin/StopRunButton";
 
 export const metadata: Metadata = { title: "Admin — Dashboard" };
 export const dynamic = "force-dynamic";
@@ -42,12 +43,13 @@ export default async function AdminDashboardPage() {
                 <th className="px-3 py-2">New</th>
                 <th className="px-3 py-2">Changed</th>
                 <th className="px-3 py-2">Failed</th>
+                <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {stats.recentRuns.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-ink-muted">
+                  <td colSpan={7} className="px-3 py-6 text-center text-ink-muted">
                     No runs yet.
                   </td>
                 </tr>
@@ -66,6 +68,9 @@ export default async function AdminDashboardPage() {
                   <td className="px-3 py-2">{run.newCount}</td>
                   <td className="px-3 py-2">{run.changedCount}</td>
                   <td className="px-3 py-2">{run.failedCount}</td>
+                  <td className="px-3 py-2 text-right">
+                    {run.status === "RUNNING" && <StopRunButton runId={run.id} />}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -103,6 +103,7 @@ enum IngestRunStatus {
   RUNNING
   COMPLETED
   FAILED
+  CANCELLED
 }
 
 /// One row per source per discovery cycle. status=FAILED means discovery itself could not

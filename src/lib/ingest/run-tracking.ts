@@ -79,3 +79,13 @@ export async function failRun(runId: string) {
     data: { status: "FAILED", finishedAt: new Date() },
   });
 }
+
+/** Cooperatively stops a run. Work already inside an external request may finish, but tick
+ * candidate queries will not claim any more of the run's queued work. */
+export async function cancelRun(runId: string) {
+  const result = await prisma.ingestRun.updateMany({
+    where: { id: runId, status: "RUNNING" },
+    data: { status: "CANCELLED", finishedAt: new Date() },
+  });
+  return result.count > 0;
+}

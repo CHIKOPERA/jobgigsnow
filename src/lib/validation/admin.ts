@@ -6,7 +6,7 @@ const cursorAndLimit = {
   limit: z.coerce.number().int().positive().max(pagination.adminMaxPageSize).default(pagination.adminPageSize),
 };
 
-export const ingestRunStatusSchema = z.enum(["RUNNING", "COMPLETED", "FAILED"]);
+export const ingestRunStatusSchema = z.enum(["RUNNING", "COMPLETED", "FAILED", "CANCELLED"]);
 export const ingestFailureStageSchema = z.enum([
   "DISCOVERY",
   "ACQUISITION",

@@ -1,0 +1,1 @@
+ALTER TYPE "IngestRunStatus" ADD VALUE 'CANCELLED';

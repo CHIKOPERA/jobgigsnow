@@ -5,6 +5,7 @@ import { getRunDetail } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
 import { StatTile } from "@/components/admin/StatTile";
 import { RunProgress } from "@/components/admin/RunProgress";
+import { StopRunButton } from "@/components/admin/StopRunButton";
 
 export const metadata: Metadata = { title: "Admin — Run detail" };
 export const dynamic = "force-dynamic";
@@ -18,14 +19,17 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-center gap-3">
-        <h1 className="text-title font-semibold">
-          <Link href={`/admin/sources/${run.sourceId}`} className="focus-ring rounded-sm hover:underline">
-            {run.source.name}
-          </Link>{" "}
-          run
-        </h1>
-        <RunStatusBadge status={run.status} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-title font-semibold">
+            <Link href={`/admin/sources/${run.sourceId}`} className="focus-ring rounded-sm hover:underline">
+              {run.source.name}
+            </Link>{" "}
+            run
+          </h1>
+          <RunStatusBadge status={run.status} />
+        </div>
+        {run.status === "RUNNING" && <StopRunButton runId={run.id} />}
       </div>
 
       <p className="text-meta text-ink-muted">

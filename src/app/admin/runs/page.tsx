@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { listRuns } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
+import { StopRunButton } from "@/components/admin/StopRunButton";
 
 export const metadata: Metadata = { title: "Admin — Runs" };
 export const dynamic = "force-dynamic";
@@ -26,12 +27,13 @@ export default async function AdminRunsPage() {
               <th className="px-3 py-2">Missing</th>
               <th className="px-3 py-2">Inactive</th>
               <th className="px-3 py-2">Failed</th>
+              <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             {runs.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-ink-muted">
+                <td colSpan={10} className="px-3 py-6 text-center text-ink-muted">
                   No runs yet.
                 </td>
               </tr>
@@ -55,6 +57,9 @@ export default async function AdminRunsPage() {
                 <td className="px-3 py-2">{run.missingCount}</td>
                 <td className="px-3 py-2">{run.inactiveCount}</td>
                 <td className="px-3 py-2">{run.failedCount + run.validationFailedCount + run.aiFailedCount}</td>
+                <td className="px-3 py-2 text-right">
+                  {run.status === "RUNNING" && <StopRunButton runId={run.id} />}
+                </td>
               </tr>
             ))}
           </tbody>

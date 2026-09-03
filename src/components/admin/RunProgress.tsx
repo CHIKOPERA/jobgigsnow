@@ -14,7 +14,7 @@ interface ProgressCounts {
 }
 
 interface RunSnapshot {
-  status: "RUNNING" | "COMPLETED" | "FAILED";
+  status: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
   discoveredCount: number;
   progress: ProgressCounts;
 }
@@ -97,7 +97,9 @@ export function RunProgress({ runId, initial }: { runId: string; initial: RunSna
               ? "bg-accent-mint text-ink"
               : snapshot.status === "FAILED"
                 ? "bg-danger text-white"
-                : "bg-accent-sage text-ink",
+                : snapshot.status === "CANCELLED"
+                  ? "bg-surface-sunk text-ink-muted"
+                  : "bg-accent-sage text-ink",
           ].join(" ")}
         >
           {snapshot.status === "RUNNING" ? "● LIVE" : snapshot.status}

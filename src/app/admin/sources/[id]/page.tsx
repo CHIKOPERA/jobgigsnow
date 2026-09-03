@@ -5,6 +5,7 @@ import { getSource } from "@/lib/ingest/source-service";
 import { listRuns } from "@/lib/ingest/admin-query";
 import { ActionButton } from "@/components/admin/ActionButton";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
+import { StopRunButton } from "@/components/admin/StopRunButton";
 import { SourceForm } from "@/components/admin/SourceForm";
 
 export const metadata: Metadata = { title: "Admin — Source" };
@@ -48,12 +49,13 @@ export default async function AdminSourceDetailPage({ params }: { params: Promis
                 <th className="px-3 py-2">Changed</th>
                 <th className="px-3 py-2">Missing</th>
                 <th className="px-3 py-2">Failed</th>
+                <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {runs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-ink-muted">
+                  <td colSpan={7} className="px-3 py-6 text-center text-ink-muted">
                     No runs yet.
                   </td>
                 </tr>
@@ -70,6 +72,9 @@ export default async function AdminSourceDetailPage({ params }: { params: Promis
                   <td className="px-3 py-2">{run.changedCount}</td>
                   <td className="px-3 py-2">{run.missingCount}</td>
                   <td className="px-3 py-2">{run.failedCount}</td>
+                  <td className="px-3 py-2 text-right">
+                    {run.status === "RUNNING" && <StopRunButton runId={run.id} />}
+                  </td>
                 </tr>
               ))}
             </tbody>
