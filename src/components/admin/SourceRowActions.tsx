@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readImportProgress } from "./read-import-progress";
 
 interface SourceRowActionsProps {
   sourceId: string;
@@ -48,8 +49,9 @@ export function SourceRowActions({ sourceId, initiallyEnabled }: SourceRowAction
     setResult(null);
     try {
       const response = await fetch(`/api/admin/sources/${sourceId}/run`, { method: "POST" });
-      if (!response.ok) throw new Error(await responseError(response, "The source could not be imported."));
-      const json = await response.json();
+      const json = await readImportProgress<{ published?: number; skipped?: number; failed?: number }>(response, (event) => {
+        setResult(event.message);
+      }, "The source could not be imported.");
       setResult(`Published ${json.published ?? 0}. Skipped ${json.skipped ?? 0}. Failed ${json.failed ?? 0}.`);
       router.refresh();
     } catch (err) {

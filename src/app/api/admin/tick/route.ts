@@ -1,5 +1,6 @@
 import { requireAdmin, adminAuthErrorResponse } from "@/lib/admin-auth";
 import { runTick } from "@/lib/ingest/tick";
+import { progressStreamResponse } from "@/lib/ingest/progress-stream";
 
 /**
  * Manually triggers one full tick (discovery + acquisition + aggregation).
@@ -12,6 +13,8 @@ export async function POST() {
   const admin = await requireAdmin();
   if (!admin.ok) return adminAuthErrorResponse(admin.reason);
 
-  const result = await runTick();
-  return Response.json({ ok: true, ...result });
+  return progressStreamResponse(async (report) => {
+    const result = await runTick(report);
+    return { ok: true, ...result };
+  });
 }

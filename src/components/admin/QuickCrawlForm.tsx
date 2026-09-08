@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readImportProgress } from "./read-import-progress";
 
 export function QuickCrawlForm() {
   const router = useRouter();
@@ -22,9 +23,9 @@ export function QuickCrawlForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      let payload: { ingestRunId?: string; outcome?: "published" | "failed" | "skipped"; error?: { message?: string } } = {};
-      try { payload = await response.json(); } catch { /* non-JSON body */ }
-      if (!response.ok) throw new Error(payload?.error?.message ?? "The job could not be imported.");
+      const payload = await readImportProgress<{ ingestRunId?: string; outcome?: "published" | "failed" | "skipped" }>(response, (event) => {
+        setResult(event.message);
+      }, "The job could not be imported.");
       setResult(payload.outcome === "published" ? "Published." : payload.outcome === "failed" ? "Import failed." : "No changes needed.");
       router.refresh();
       setSubmitting(false);
@@ -59,7 +60,7 @@ export function QuickCrawlForm() {
         </button>
       </div>
       {error && <p className="mt-3 text-meta text-danger">{error}</p>}
-      {result && <p className="mt-3 text-meta text-ink-muted">{result}</p>}
+      {result && <p aria-live="polite" className="mt-3 text-meta text-ink-muted">{result}</p>}
       <p className="mt-4 text-meta text-ink-muted">
         The job will be published automatically. An image is added when one is available.
       </p>

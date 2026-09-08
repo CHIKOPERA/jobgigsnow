@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { readImportProgress } from "./read-import-progress";
 
 interface ActionButtonProps {
   label: string;
@@ -22,8 +23,9 @@ export function ActionButton({ label, pendingLabel, method, url }: ActionButtonP
     setMessage(null);
     try {
       const res = await fetch(url, { method });
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const json = await res.json().catch(() => null);
+      const json = await readImportProgress<{ published?: number; skipped?: number; failed?: number } | null>(res, (event) => {
+        setMessage(event.message);
+      }, "The action could not be completed.");
       if (json && typeof json.published === "number") {
         setMessage(`Published ${json.published}. Skipped ${json.skipped ?? 0}. Failed ${json.failed ?? 0}.`);
       }
@@ -45,7 +47,7 @@ export function ActionButton({ label, pendingLabel, method, url }: ActionButtonP
       >
         {state === "pending" ? pendingLabel : state === "error" ? "Failed — try again" : label}
       </button>
-      {message && <span className="text-[11px] leading-snug text-ink-muted">{message}</span>}
+      {message && <span aria-live="polite" className="text-[11px] leading-snug text-ink-muted">{message}</span>}
     </div>
   );
 }

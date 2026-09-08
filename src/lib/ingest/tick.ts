@@ -21,6 +21,9 @@ import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
 import { finalizeRunIfComplete, incrementRunCounters, recordFailure } from "./run-tracking";
 import type { RawExtractionBundle } from "./types";
+import type { ImportProgressReporter, ImportStage } from "./progress-types";
+
+type JobStageReporter = (stage: ImportStage, jobTitle?: string) => void;
 
 function timeBudget(startedAt: number): boolean {
   return Date.now() - startedAt < ingest.tickTimeBudgetMs;
@@ -78,7 +81,7 @@ interface AcquisitionCandidate {
   ingestRun: { status: IngestRunStatus } | null;
 }
 
-async function processAcquisition(row: AcquisitionCandidate): Promise<"fetched" | "failed" | "skipped"> {
+async function processAcquisition(row: AcquisitionCandidate, report?: JobStageReporter): Promise<"fetched" | "failed" | "skipped"> {
   if (row.ingestRun && row.ingestRun.status !== "RUNNING") return "skipped";
   const claim = await prisma.rawJob.updateMany({
     where: { id: row.id, updatedAt: row.updatedAt,
@@ -89,6 +92,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<"fetched" 
   if (claim.count === 0) return "skipped";
 
   try {
+    report?.("capturing");
     const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
 
     const acquired = await acquirePage(row.externalUrl, config);
@@ -181,7 +185,7 @@ interface AggregationCandidate {
   ingestRun: { status: IngestRunStatus } | null;
 }
 
-async function processAggregation(row: AggregationCandidate): Promise<"published" | "failed" | "skipped"> {
+async function processAggregation(row: AggregationCandidate, report?: JobStageReporter): Promise<"published" | "failed" | "skipped"> {
   if (row.ingestRun && row.ingestRun.status !== "RUNNING") return "skipped";
   const claim = await prisma.rawJob.updateMany({
     where: {
@@ -193,6 +197,7 @@ async function processAggregation(row: AggregationCandidate): Promise<"published
   if (claim.count === 0) return "skipped";
 
   try {
+    report?.("rewriting");
     const bundle = row.payload as unknown as RawExtractionBundle;
 
     const { result, inputTokens, outputTokens } = await aggregate({
@@ -235,6 +240,7 @@ async function processAggregation(row: AggregationCandidate): Promise<"published
     } else {
       const job = await upsertJob(normalized.input);
 
+      report?.("image", normalized.input.title);
       await prepareAutomaticPublication(
         () => searchPexels(normalized.input.title, 1),
         async (photo) => ({
@@ -243,14 +249,17 @@ async function processAggregation(row: AggregationCandidate): Promise<"published
           socialImageCredit: `Photo by ${photo.photographer} on Pexels`,
           socialImageSourceUrl: photo.photographerUrl,
         }),
-        (image) => prisma.job.update({
-          where: { id: job.id },
-          data: {
-            ...(image ?? {}),
-            status: "PUBLISHED",
-            postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
-          },
-        }),
+        (image) => {
+          report?.("publishing", normalized.input.title);
+          return prisma.job.update({
+            where: { id: job.id },
+            data: {
+              ...(image ?? {}),
+              status: "PUBLISHED",
+              postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
+            },
+          });
+        },
       );
 
       const improvementRunCreates = [
@@ -297,7 +306,7 @@ async function processAggregation(row: AggregationCandidate): Promise<"published
 }
 
 /** Processes one queued detail URL immediately from capture through publication. */
-export async function processQueuedRawJob(rawJobId: string): Promise<"published" | "failed" | "skipped"> {
+export async function processQueuedRawJob(rawJobId: string, report?: JobStageReporter): Promise<"published" | "failed" | "skipped"> {
   const acquisition = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
     select: {
@@ -322,7 +331,7 @@ export async function processQueuedRawJob(rawJobId: string): Promise<"published"
     acquisition.lastCrawledAt < recrawlCutoff;
 
   if (shouldAcquire) {
-    const acquisitionResult = await processAcquisition(acquisition);
+    const acquisitionResult = await processAcquisition(acquisition, report);
     if (acquisitionResult !== "fetched") return acquisitionResult;
   }
 
@@ -339,7 +348,7 @@ export async function processQueuedRawJob(rawJobId: string): Promise<"published"
     },
   });
   if (aggregation?.fetchStatus === "FETCHED" && aggregation.needsAggregation) {
-    return processAggregation(aggregation);
+    return processAggregation(aggregation, report);
   }
   return "skipped";
 }
@@ -358,10 +367,10 @@ export interface SimpleImportResult {
   elapsedMs: number;
 }
 
-async function processRunJobs(runId: string, startedAt: number): Promise<SimpleImportResult> {
+async function processRunJobs(runId: string, startedAt: number, report?: ImportProgressReporter): Promise<SimpleImportResult> {
   const run = await prisma.ingestRun.findUnique({
     where: { id: runId },
-    select: { status: true, discoveredCount: true, failedCount: true },
+    select: { status: true, discoveredCount: true, failedCount: true, source: { select: { name: true } } },
   });
   if (!run || run.status !== "RUNNING") {
     return {
@@ -394,7 +403,7 @@ async function processRunJobs(runId: string, startedAt: number): Promise<SimpleI
 
   const result: SimpleImportResult = {
     ingestRunId: runId,
-    found: run.discoveredCount,
+    found: rows.length,
     processed: 0,
     published: 0,
     skipped: 0,
@@ -402,13 +411,47 @@ async function processRunJobs(runId: string, startedAt: number): Promise<SimpleI
     elapsedMs: 0,
   };
 
-  for (const row of rows) {
+  const sourceName = run.source.name;
+  const emit = (stage: ImportStage, message: string, current?: number, jobTitle?: string) => report?.({
+    type: "progress",
+    stage,
+    message,
+    runId,
+    sourceName,
+    jobTitle,
+    found: result.found,
+    processed: result.processed,
+    published: result.published,
+    skipped: result.skipped,
+    failed: result.failed,
+    current,
+    total: rows.length,
+  });
+
+  emit("found", rows.length === 0 ? `${sourceName} is up to date.` : `${rows.length} new or updated ${rows.length === 1 ? "job" : "jobs"} found.`);
+
+  for (const [index, row] of rows.entries()) {
     if (!timeBudget(startedAt)) break;
-    const outcome = await processQueuedRawJob(row.id);
+    const current = index + 1;
+    const outcome = await processQueuedRawJob(row.id, (stage, jobTitle) => {
+      const label = jobTitle ?? `job ${current} of ${rows.length}`;
+      const messages: Partial<Record<ImportStage, string>> = {
+        capturing: `Capturing ${label}…`,
+        rewriting: `Rewriting ${label}…`,
+        image: `Finding an image for ${label}…`,
+        publishing: `Publishing ${label}…`,
+      };
+      emit(stage, messages[stage] ?? `Processing ${label}…`, current, jobTitle);
+    });
     result.processed += 1;
     if (outcome === "published") result.published += 1;
     else if (outcome === "failed") result.failed += 1;
     else result.skipped += 1;
+    const finalStage = outcome === "published" ? "published" : outcome === "failed" ? "failed" : "skipped";
+    const finalMessage = outcome === "published"
+      ? `Published job ${current} of ${rows.length}.`
+      : outcome === "failed" ? `Job ${current} of ${rows.length} needs attention.` : `Skipped unchanged job ${current} of ${rows.length}.`;
+    emit(finalStage, finalMessage, current);
   }
 
   await finalizeRunIfComplete(runId);
@@ -417,12 +460,16 @@ async function processRunJobs(runId: string, startedAt: number): Promise<SimpleI
 }
 
 /** One clear source import: discover URLs, process each URL, publish every valid job. */
-export async function importSource(sourceId: string, startedAt = Date.now()): Promise<SimpleImportResult> {
+export async function importSource(sourceId: string, startedAt = Date.now(), report?: ImportProgressReporter): Promise<SimpleImportResult> {
+  const source = await prisma.source.findUnique({ where: { id: sourceId }, select: { name: true, enabled: true } });
+  if (source?.enabled) {
+    report?.({ type: "progress", stage: "discovering", message: `Checking ${source.name} for new jobs…`, sourceName: source.name, found: 0, processed: 0, published: 0, skipped: 0, failed: 0 });
+  }
   const runId = await discoverSource(sourceId);
   if (!runId) {
     return { ingestRunId: null, found: 0, processed: 0, published: 0, skipped: 0, failed: 0, elapsedMs: Date.now() - startedAt };
   }
-  return processRunJobs(runId, startedAt);
+  return processRunJobs(runId, startedAt, report);
 }
 
 /** Compatibility wrapper for old callers that already have a run id. */
@@ -443,14 +490,14 @@ export interface TickResult {
  * it (Section G). Every piece of state this touches is durable (RawJob/IngestRun columns) — a
  * killed invocation just leaves rows for the next tick's claim queries to pick back up.
  */
-export async function runTick(): Promise<TickResult> {
+export async function runTick(report?: ImportProgressReporter): Promise<TickResult> {
   const startedAt = Date.now();
   const sourceRuns: SimpleImportResult[] = [];
   const runningRunIds = timeBudget(startedAt) ? await findRunningRunIds() : [];
 
   for (const runId of runningRunIds) {
     if (!timeBudget(startedAt)) break;
-    sourceRuns.push(await processRunJobs(runId, startedAt));
+    sourceRuns.push(await processRunJobs(runId, startedAt, report));
   }
 
   const dueSourceIds = timeBudget(startedAt) ? await findDueSourceIds() : [];
@@ -465,11 +512,11 @@ export async function runTick(): Promise<TickResult> {
     if (alreadyRunning) {
       if (!activeRunIds.has(alreadyRunning.id)) {
         activeRunIds.add(alreadyRunning.id);
-        sourceRuns.push(await processRunJobs(alreadyRunning.id, startedAt));
+        sourceRuns.push(await processRunJobs(alreadyRunning.id, startedAt, report));
       }
       continue;
     }
-    sourceRuns.push(await importSource(sourceId, startedAt));
+    sourceRuns.push(await importSource(sourceId, startedAt, report));
   }
 
   return {
