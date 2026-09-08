@@ -15,9 +15,15 @@ import { descriptionContainsHtml, sanitizeJobDescription } from "@/lib/job-rich-
 interface JobDetailProps {
   job: JobDetailDto;
   saved: boolean;
+  image?: {
+    url: string;
+    alt: string;
+    credit: string | null;
+    sourceUrl: string | null;
+  } | null;
 }
 
-export function JobDetail({ job, saved }: JobDetailProps) {
+export function JobDetail({ job, saved, image }: JobDetailProps) {
   const isClosed = job.status !== "PUBLISHED";
   const salary = formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryPeriod);
   const richDescription = descriptionContainsHtml(job.description) ? sanitizeJobDescription(job.description) : null;
@@ -70,6 +76,22 @@ export function JobDetail({ job, saved }: JobDetailProps) {
       <p className="mt-3 text-meta text-ink-muted">
         {isClosed ? "This posting is no longer accepting applications." : formatRelativeTime(job.postedAt)}
       </p>
+
+      {image && (
+        <figure className="mt-6 overflow-hidden rounded-md border border-line bg-bg">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={image.url} alt={image.alt} className="aspect-[1200/630] w-full object-cover" loading="eager" />
+          {image.credit && (
+            <figcaption className="px-3 py-2 text-[11px] text-ink-muted">
+              {image.sourceUrl ? (
+                <a href={image.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                  {image.credit}
+                </a>
+              ) : image.credit}
+            </figcaption>
+          )}
+        </figure>
+      )}
 
       {job.highlights.length > 0 && (
         <ul className="mt-6 flex flex-col gap-2">

@@ -1,9 +1,8 @@
-import { after } from "next/server";
 import { z } from "zod";
 import { requireAdmin, adminAuthErrorResponse } from "@/lib/admin-auth";
 import { queueOneOffUrl } from "@/lib/ingest/one-off";
 import { processQueuedRawJob } from "@/lib/ingest/tick";
-import { failRun, recordFailure } from "@/lib/ingest/run-tracking";
+import { finalizeRunIfComplete } from "@/lib/ingest/run-tracking";
 import { assertPublicHttpUrl } from "@/lib/validation/public-url";
 import { errorResponse } from "@/lib/validation/common";
 
@@ -19,23 +18,11 @@ export async function POST(request: Request) {
     const body = bodySchema.parse(await request.json());
     const url = await assertPublicHttpUrl(body.url);
     const queued = await queueOneOffUrl(url);
+    const outcome = await processQueuedRawJob(queued.rawJobId);
 
-    after(async () => {
-      try {
-        await processQueuedRawJob(queued.rawJobId);
-      } catch (error) {
-        await recordFailure({
-          ingestRunId: queued.ingestRunId,
-          rawJobId: queued.rawJobId,
-          stage: "PERSISTENCE",
-          url,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        await failRun(queued.ingestRunId);
-      }
-    });
+    await finalizeRunIfComplete(queued.ingestRunId);
 
-    return Response.json(queued, { status: 202 });
+    return Response.json({ ...queued, outcome });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse("INVALID_URL", error.issues[0]?.message ?? "Enter a valid URL.", 400);

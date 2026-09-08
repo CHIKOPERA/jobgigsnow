@@ -1,9 +1,10 @@
 import "server-only";
+import { fetchWithJina, isJinaEnabled } from "./jina";
+import { JinaError } from "./jina-client";
 import { sources } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
 import { acquireCornerstone } from "./cornerstone";
 import { jobPostingHtml } from "./job-html";
-import { fetchWithLightpanda, isLightpandaConfigured } from "./lightpanda";
 import { acquireOracle, isOracleJobUrl } from "./oracle";
 import { acquireHostSlot } from "./rate-limiter";
 import { isAllowedByRobots } from "./robots";
@@ -11,6 +12,7 @@ import { acquireWorkday, isWorkdayJobUrl } from "./workday";
 
 export interface AcquisitionResult {
   html: string;
+  markdown?: string;
   htmlTruncated: boolean;
   httpStatus: number;
   /** Redirect target, if the fetch followed one — the metadata extractor's <link rel="canonical">
@@ -128,17 +130,8 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
         };
       }
 
-      // JS-rendered HTML: use Lightpanda Cloud if the source opts in and a token is set.
-      if (config?.provider === "html" && config.jsRendering && isLightpandaConfigured()) {
-        const { html, httpStatus } = await fetchWithLightpanda(url, timeoutMs);
-        const truncated = html.length > sources.maxHtmlBytes;
-        return {
-          html: truncated ? html.slice(0, sources.maxHtmlBytes) : html,
-          htmlTruncated: truncated,
-          httpStatus,
-          redirectedUrl: null,
-          fetchedAt: new Date().toISOString(),
-        };
+      if (isJinaEnabled()) {
+        return await fetchWithJina(url, config?.fetchTimeoutMs ?? 45_000);
       }
 
       const res = await fetch(url, {
@@ -161,6 +154,8 @@ async function fetchWithRetry(url: string, config?: CrawlConfig): Promise<Acquis
       };
     } catch (err) {
       lastError = err;
+      // Permission failures and rate limits do not improve with immediate retries.
+      if (err instanceof JinaError && [400, 401, 402, 403, 404, 429].includes(err.status)) throw err;
       if (attempt < sources.fetchMaxRetries) {
         await sleep(sources.fetchBackoffBaseMs * 2 ** attempt);
       }
@@ -178,7 +173,7 @@ export async function acquirePage(url: string, config?: CrawlConfig): Promise<Ac
   // robots.txt disallows its public /hcmUI/, /ux/ats/, or /jobs/ paths.
   const usesAtsApi =
     isWorkdayJobUrl(parsedUrl) ||
-    isOracleJobUrl(parsedUrl) ||
+    (isOracleJobUrl(parsedUrl) && config?.provider === "oracle") ||
     isSmartRecruitersJobUrl(parsedUrl) ||
     (config?.provider === "cornerstone" && /\/requisition\//.test(parsedUrl.pathname));
 

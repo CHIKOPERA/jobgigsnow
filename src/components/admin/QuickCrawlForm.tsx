@@ -8,11 +8,13 @@ export function QuickCrawlForm() {
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setResult(null);
 
     try {
       const response = await fetch("/api/admin/crawl", {
@@ -20,14 +22,14 @@ export function QuickCrawlForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      let payload: { ingestRunId?: string; error?: { message?: string } } = {};
+      let payload: { ingestRunId?: string; outcome?: "published" | "failed" | "skipped"; error?: { message?: string } } = {};
       try { payload = await response.json(); } catch { /* non-JSON body */ }
-      if (!response.ok) throw new Error(payload?.error?.message ?? "The crawl could not be started.");
-      if (!payload.ingestRunId) throw new Error("The crawl could not be started.");
-      router.push(`/admin/runs/${payload.ingestRunId}`);
+      if (!response.ok) throw new Error(payload?.error?.message ?? "The job could not be imported.");
+      setResult(payload.outcome === "published" ? "Published." : payload.outcome === "failed" ? "Import failed." : "No changes needed.");
       router.refresh();
+      setSubmitting(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The crawl could not be started.");
+      setError(err instanceof Error ? err.message : "The job could not be imported.");
       setSubmitting(false);
     }
   }
@@ -53,12 +55,13 @@ export function QuickCrawlForm() {
           disabled={submitting}
           className="focus-ring h-12 shrink-0 rounded-pill bg-ink px-6 text-meta font-semibold text-surface transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          {submitting ? "Starting…" : "Start crawl"}
+          {submitting ? "Importing…" : "Import job"}
         </button>
       </div>
       {error && <p className="mt-3 text-meta text-danger">{error}</p>}
+      {result && <p className="mt-3 text-meta text-ink-muted">{result}</p>}
       <p className="mt-4 text-meta text-ink-muted">
-        Paste one public job page. It is fetched once, extracted, sent through AI aggregation, then added to Review.
+        The job will be published automatically. An image is added when one is available.
       </p>
     </form>
   );

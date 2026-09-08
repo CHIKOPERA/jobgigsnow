@@ -1,8 +1,12 @@
 import "server-only";
 import type { IngestRunStatus, Prisma } from "@/generated/prisma/client";
+import { searchPexels } from "@/lib/pexels";
+import { importJobSocialImage } from "@/lib/job-social-image";
+import { prepareAutomaticPublication } from "./auto-publish";
 import { prisma } from "@/lib/prisma";
 import { ai as aiConfig } from "@/config/ai";
 import { ingest } from "@/config/ingest";
+import { sources as sourcesConfig } from "@/config/sources";
 import type { CrawlConfig } from "@/lib/validation/source";
 import { acquirePage } from "./acquisition";
 import { aggregate } from "./aggregate";
@@ -16,22 +20,10 @@ import { upsertJob } from "./job-service";
 import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
 import { finalizeRunIfComplete, incrementRunCounters, recordFailure } from "./run-tracking";
-import { seoRewrite } from "./seo-rewrite";
 import type { RawExtractionBundle } from "./types";
 
 function timeBudget(startedAt: number): boolean {
   return Date.now() - startedAt < ingest.tickTimeBudgetMs;
-}
-
-async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
-  let index = 0;
-  async function next(): Promise<void> {
-    const current = index++;
-    if (current >= items.length) return;
-    await worker(items[current]);
-    return next();
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => next()));
 }
 
 type RunCounters = Parameters<typeof incrementRunCounters>[1];
@@ -46,7 +38,7 @@ async function maybeIncrementCounters(runId: string | null, counters: RunCounter
 // Discovery
 // ---------------------------------------------------------------------------
 
-async function runDiscoveryIfDue(): Promise<string[]> {
+async function findDueSourceIds(): Promise<string[]> {
   const now = Date.now();
   const enabledSources = await prisma.source.findMany({
     where: { enabled: true },
@@ -58,17 +50,17 @@ async function runDiscoveryIfDue(): Promise<string[]> {
     .sort((a, b) => (a.lastRunAt?.getTime() ?? 0) - (b.lastRunAt?.getTime() ?? 0))
     .slice(0, ingest.discoveryPerTick);
 
-  const runIds: string[] = [];
-  // Run discoveries concurrently — each discoverSource catches its own errors and never throws,
-  // so Promise.all is safe. Concurrent discovery prevents HTML sources with long pagination
-  // crawls from blocking the budget before acquisition can run.
-  await Promise.all(
-    due.map(async (source) => {
-      const runId = await discoverSource(source.id);
-      if (runId) runIds.push(runId);
-    }),
-  );
-  return runIds;
+  return due.map((source) => source.id);
+}
+
+async function findRunningRunIds(): Promise<string[]> {
+  const runs = await prisma.ingestRun.findMany({
+    where: { status: "RUNNING" },
+    orderBy: { startedAt: "asc" },
+    take: ingest.discoveryPerTick,
+    select: { id: true },
+  });
+  return runs.map((run) => run.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,49 +73,20 @@ interface AcquisitionCandidate {
   sourceId: string;
   ingestRunId: string | null;
   contentHash: string;
+  updatedAt: Date;
   source: { crawlConfig: unknown } | null;
   ingestRun: { status: IngestRunStatus } | null;
 }
 
-async function claimAcquisitionCandidates(limit: number): Promise<AcquisitionCandidate[]> {
-  const now = Date.now();
-  const staleClaimCutoff = new Date(now - ingest.claimStaleMs);
-  const recrawlCutoff = new Date(now - ingest.recrawlAfterMs);
-
-  return prisma.rawJob.findMany({
-    where: {
-      AND: [
-        { OR: [{ ingestRunId: null }, { ingestRun: { status: "RUNNING" } }] },
-        {
-          OR: [
-            { fetchStatus: "PENDING" },
-            { fetchStatus: "FETCHING", updatedAt: { lt: staleClaimCutoff } },
-            {
-              fetchStatus: "FETCHED",
-              active: true,
-              OR: [{ lastCrawledAt: null }, { lastCrawledAt: { lt: recrawlCutoff } }],
-            },
-          ],
-        },
-      ],
+async function processAcquisition(row: AcquisitionCandidate): Promise<"fetched" | "failed" | "skipped"> {
+  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return "skipped";
+  const claim = await prisma.rawJob.updateMany({
+    where: { id: row.id, updatedAt: row.updatedAt,
+      OR: [{ fetchStatus: { not: "FETCHING" } }, { updatedAt: { lt: new Date(Date.now() - ingest.claimStaleMs) } }],
     },
-    orderBy: { updatedAt: "asc" },
-    take: limit,
-    select: {
-      id: true,
-      externalUrl: true,
-      sourceId: true,
-      ingestRunId: true,
-      contentHash: true,
-      source: { select: { crawlConfig: true } },
-      ingestRun: { select: { status: true } },
-    },
+    data: { fetchStatus: "FETCHING" },
   });
-}
-
-async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
-  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return;
-  await prisma.rawJob.update({ where: { id: row.id }, data: { fetchStatus: "FETCHING" } });
+  if (claim.count === 0) return "skipped";
 
   try {
     const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
@@ -139,7 +102,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
     );
     const metadata = extractMetadata(html, row.externalUrl);
     const readable = extractReadable(html, row.externalUrl);
-    const markdown = extractMarkdown(html);
+    const markdown = acquired.markdown ?? extractMarkdown(html);
 
     const reconciled = reconcile(jsonLdToCandidates(jsonLdPostings), selectorCandidates, readabilityToCandidates(readable));
     const aggregationContext = markdown ?? readable.text;
@@ -185,6 +148,7 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
       await maybeIncrementCounters(row.ingestRunId, changed ? { changedCount: 1 } : { unchangedCount: 1 });
     }
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
+    return "fetched";
   } catch (err) {
     await prisma.rawJob.update({
       where: { id: row.id },
@@ -201,13 +165,8 @@ async function processAcquisition(row: AcquisitionCandidate): Promise<void> {
       });
       await finalizeRunIfComplete(row.ingestRunId);
     }
+    return "failed";
   }
-}
-
-async function drainAcquisition(): Promise<number> {
-  const candidates = await claimAcquisitionCandidates(ingest.acquisitionPerTick);
-  await runWithConcurrency(candidates, ingest.acquisitionConcurrency, processAcquisition);
-  return candidates.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,32 +181,16 @@ interface AggregationCandidate {
   ingestRun: { status: IngestRunStatus } | null;
 }
 
-async function claimAggregationCandidates(limit: number): Promise<AggregationCandidate[]> {
-  const staleCutoff = new Date(Date.now() - ingest.claimStaleMs);
-  return prisma.rawJob.findMany({
+async function processAggregation(row: AggregationCandidate): Promise<"published" | "failed" | "skipped"> {
+  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return "skipped";
+  const claim = await prisma.rawJob.updateMany({
     where: {
-      needsAggregation: true,
-      fetchStatus: "FETCHED",
-      AND: [
-        { OR: [{ ingestRunId: null }, { ingestRun: { status: "RUNNING" } }] },
-        { OR: [{ aggregationClaimedAt: null }, { aggregationClaimedAt: { lt: staleCutoff } }] },
-      ],
+      id: row.id, needsAggregation: true, fetchStatus: "FETCHED",
+      OR: [{ aggregationClaimedAt: null }, { aggregationClaimedAt: { lt: new Date(Date.now() - ingest.claimStaleMs) } }],
     },
-    orderBy: { updatedAt: "asc" },
-    take: limit,
-    select: {
-      id: true,
-      externalUrl: true,
-      ingestRunId: true,
-      payload: true,
-      ingestRun: { select: { status: true } },
-    },
+    data: { aggregationClaimedAt: new Date() },
   });
-}
-
-async function processAggregation(row: AggregationCandidate): Promise<void> {
-  if (row.ingestRun && row.ingestRun.status !== "RUNNING") return;
-  await prisma.rawJob.update({ where: { id: row.id }, data: { aggregationClaimedAt: new Date() } });
+  if (claim.count === 0) return "skipped";
 
   try {
     const bundle = row.payload as unknown as RawExtractionBundle;
@@ -290,42 +233,25 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
         });
       }
     } else {
-      // SEO rewrite is a text-quality pass on already-valid fields, not a data-extraction step —
-      // its failure must never block Job creation. On failure, the pre-rewrite aggregated
-      // title/description/tags are used as-is; the reviewer can always re-run "Rewrite with AI"
-      // manually from /admin/review afterward.
-      let seoOutcome: Awaited<ReturnType<typeof seoRewrite>> | null = null;
-      try {
-        seoOutcome = await seoRewrite({
-          title: normalized.input.title,
-          companyName: normalized.input.companyName,
-          location: normalized.input.location,
-          remoteType: normalized.input.remoteType,
-          employmentType: normalized.input.employmentType,
-          description: normalized.input.description,
-          tags: normalized.input.tags,
-          applyUrl: normalized.input.applyUrl ?? null,
-        });
-        normalized.input.title = seoOutcome.title;
-        normalized.input.description = seoOutcome.description;
-        normalized.input.tags = seoOutcome.tags;
-        normalized.input.rewritePrompt = seoOutcome.promptTemplate;
-      } catch (seoError) {
-        if (row.ingestRunId) {
-          await recordFailure({
-            ingestRunId: row.ingestRunId,
-            rawJobId: row.id,
-            stage: "SEO_REWRITE",
-            url: row.externalUrl,
-            message: seoError instanceof Error ? seoError.message : String(seoError),
-          });
-        }
-      }
-
-      // Job upsert happens outside the transaction below — if the process crashes between the two,
-      // the worst case is one wasted retry next tick (needsAggregation stays true, re-aggregating
-      // re-upserts the *same* slug via normalize()'s slug-stability lookup), never a duplicate Job.
       const job = await upsertJob(normalized.input);
+
+      await prepareAutomaticPublication(
+        () => searchPexels(normalized.input.title, 1),
+        async (photo) => ({
+          socialImageUrl: await importJobSocialImage(job.id, photo.id, photo.url),
+          socialImageAlt: photo.alt,
+          socialImageCredit: `Photo by ${photo.photographer} on Pexels`,
+          socialImageSourceUrl: photo.photographerUrl,
+        }),
+        (image) => prisma.job.update({
+          where: { id: job.id },
+          data: {
+            ...(image ?? {}),
+            status: "PUBLISHED",
+            postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
+          },
+        }),
+      );
 
       const improvementRunCreates = [
         prisma.improvementRun.create({
@@ -343,28 +269,6 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
           },
         }),
       ];
-      if (seoOutcome) {
-        improvementRunCreates.push(
-          prisma.improvementRun.create({
-            data: {
-              rawJobId: row.id,
-              jobId: job.id,
-              model: aiConfig.model,
-              promptVersion: "seo-rewrite-v1",
-              inputTokens: seoOutcome.inputTokens,
-              outputTokens: seoOutcome.outputTokens,
-              diff: {
-                kind: "seo_rewrite",
-                promptTemplate: seoOutcome.promptTemplate,
-                after: { title: seoOutcome.title, description: seoOutcome.description, tags: seoOutcome.tags },
-              } as Prisma.InputJsonValue,
-              status: "SUCCEEDED",
-              startedAt: new Date(),
-              finishedAt: new Date(),
-            },
-          }),
-        );
-      }
 
       await prisma.$transaction([
         prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
@@ -373,6 +277,7 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
     }
 
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
+    return normalized.ok ? "published" : "failed";
   } catch (err) {
     // needsAggregation is deliberately left true — a transient AI/network failure is retried by
     // the next tick automatically (Section F, point 11), unlike a validation failure above.
@@ -387,19 +292,12 @@ async function processAggregation(row: AggregationCandidate): Promise<void> {
       });
       await finalizeRunIfComplete(row.ingestRunId);
     }
+    return "failed";
   }
 }
 
-async function drainAggregation(): Promise<number> {
-  const candidates = await claimAggregationCandidates(ingest.aggregationPerTick);
-  await runWithConcurrency(candidates, ingest.aggregationConcurrency, processAggregation);
-  return candidates.length;
-}
-
-/** Processes one explicitly queued detail URL immediately. The durable RawJob/IngestRun rows are
- * created before this runs, so a terminated background task is still picked up by the next cron
- * tick. This is used by the admin one-off crawler. */
-export async function processQueuedRawJob(rawJobId: string): Promise<void> {
+/** Processes one queued detail URL immediately from capture through publication. */
+export async function processQueuedRawJob(rawJobId: string): Promise<"published" | "failed" | "skipped"> {
   const acquisition = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
     select: {
@@ -408,15 +306,24 @@ export async function processQueuedRawJob(rawJobId: string): Promise<void> {
       sourceId: true,
       ingestRunId: true,
       contentHash: true,
+      updatedAt: true,
       fetchStatus: true,
+      lastCrawledAt: true,
       source: { select: { crawlConfig: true } },
       ingestRun: { select: { status: true } },
     },
   });
-  if (!acquisition || (acquisition.ingestRun && acquisition.ingestRun.status !== "RUNNING")) return;
+  if (!acquisition || (acquisition.ingestRun && acquisition.ingestRun.status !== "RUNNING")) return "skipped";
 
-  if (acquisition.fetchStatus !== "FETCHED") {
-    await processAcquisition(acquisition);
+  const recrawlCutoff = new Date(Date.now() - ingest.recrawlAfterMs);
+  const shouldAcquire =
+    acquisition.fetchStatus !== "FETCHED" ||
+    acquisition.lastCrawledAt === null ||
+    acquisition.lastCrawledAt < recrawlCutoff;
+
+  if (shouldAcquire) {
+    const acquisitionResult = await processAcquisition(acquisition);
+    if (acquisitionResult !== "fetched") return acquisitionResult;
   }
 
   const aggregation = await prisma.rawJob.findUnique({
@@ -432,18 +339,102 @@ export async function processQueuedRawJob(rawJobId: string): Promise<void> {
     },
   });
   if (aggregation?.fetchStatus === "FETCHED" && aggregation.needsAggregation) {
-    await processAggregation(aggregation);
+    return processAggregation(aggregation);
   }
+  return "skipped";
 }
 
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
+export interface SimpleImportResult {
+  ingestRunId: string | null;
+  found: number;
+  processed: number;
+  published: number;
+  skipped: number;
+  failed: number;
+  elapsedMs: number;
+}
+
+async function processRunJobs(runId: string, startedAt: number): Promise<SimpleImportResult> {
+  const run = await prisma.ingestRun.findUnique({
+    where: { id: runId },
+    select: { status: true, discoveredCount: true, failedCount: true },
+  });
+  if (!run || run.status !== "RUNNING") {
+    return {
+      ingestRunId: runId,
+      found: run?.discoveredCount ?? 0,
+      processed: 0,
+      published: 0,
+      skipped: 0,
+      failed: run?.status === "FAILED" ? Math.max(run.failedCount, 1) : 0,
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+
+  const recrawlCutoff = new Date(Date.now() - ingest.recrawlAfterMs);
+  const rows = await prisma.rawJob.findMany({
+    where: {
+      ingestRunId: runId,
+      active: true,
+      OR: [
+        { fetchStatus: { not: "FETCHED" } },
+        { needsAggregation: true },
+        { lastCrawledAt: null },
+        { lastCrawledAt: { lt: recrawlCutoff } },
+      ],
+    },
+    orderBy: [{ fetchStatus: "asc" }, { updatedAt: "asc" }],
+    take: sourcesConfig.maxPagesPerRun,
+    select: { id: true },
+  });
+
+  const result: SimpleImportResult = {
+    ingestRunId: runId,
+    found: run.discoveredCount,
+    processed: 0,
+    published: 0,
+    skipped: 0,
+    failed: 0,
+    elapsedMs: 0,
+  };
+
+  for (const row of rows) {
+    if (!timeBudget(startedAt)) break;
+    const outcome = await processQueuedRawJob(row.id);
+    result.processed += 1;
+    if (outcome === "published") result.published += 1;
+    else if (outcome === "failed") result.failed += 1;
+    else result.skipped += 1;
+  }
+
+  await finalizeRunIfComplete(runId);
+  result.elapsedMs = Date.now() - startedAt;
+  return result;
+}
+
+/** One clear source import: discover URLs, process each URL, publish every valid job. */
+export async function importSource(sourceId: string, startedAt = Date.now()): Promise<SimpleImportResult> {
+  const runId = await discoverSource(sourceId);
+  if (!runId) {
+    return { ingestRunId: null, found: 0, processed: 0, published: 0, skipped: 0, failed: 0, elapsedMs: Date.now() - startedAt };
+  }
+  return processRunJobs(runId, startedAt);
+}
+
+/** Compatibility wrapper for old callers that already have a run id. */
+export async function processSourceRun(runId: string, startedAt = Date.now()): Promise<void> {
+  await processRunJobs(runId, startedAt);
+}
+
 export interface TickResult {
   discoveryRunIds: string[];
   acquisitionProcessed: number;
   aggregationProcessed: number;
+  sourceRuns: SimpleImportResult[];
   elapsedMs: number;
 }
 
@@ -454,18 +445,38 @@ export interface TickResult {
  */
 export async function runTick(): Promise<TickResult> {
   const startedAt = Date.now();
+  const sourceRuns: SimpleImportResult[] = [];
+  const runningRunIds = timeBudget(startedAt) ? await findRunningRunIds() : [];
 
-  // Drain durable fetch backlog first, then discover a small bounded set of fresh work before the
-  // slower AI stage. This prevents either multi-page discovery or AI calls from starving the
-  // other stages across repeated ticks.
-  const acquisitionProcessed = timeBudget(startedAt) ? await drainAcquisition() : 0;
-  const discoveryRunIds = timeBudget(startedAt) ? await runDiscoveryIfDue() : [];
-  const aggregationProcessed = timeBudget(startedAt) ? await drainAggregation() : 0;
+  for (const runId of runningRunIds) {
+    if (!timeBudget(startedAt)) break;
+    sourceRuns.push(await processRunJobs(runId, startedAt));
+  }
+
+  const dueSourceIds = timeBudget(startedAt) ? await findDueSourceIds() : [];
+  const activeRunIds = new Set(sourceRuns.flatMap((run) => run.ingestRunId ? [run.ingestRunId] : []));
+
+  for (const sourceId of dueSourceIds) {
+    if (!timeBudget(startedAt)) break;
+    const alreadyRunning = await prisma.ingestRun.findFirst({
+      where: { sourceId, status: "RUNNING" },
+      select: { id: true },
+    });
+    if (alreadyRunning) {
+      if (!activeRunIds.has(alreadyRunning.id)) {
+        activeRunIds.add(alreadyRunning.id);
+        sourceRuns.push(await processRunJobs(alreadyRunning.id, startedAt));
+      }
+      continue;
+    }
+    sourceRuns.push(await importSource(sourceId, startedAt));
+  }
 
   return {
-    discoveryRunIds,
-    acquisitionProcessed,
-    aggregationProcessed,
+    discoveryRunIds: sourceRuns.flatMap((run) => run.ingestRunId ? [run.ingestRunId] : []),
+    acquisitionProcessed: sourceRuns.reduce((sum, run) => sum + run.processed, 0),
+    aggregationProcessed: sourceRuns.reduce((sum, run) => sum + run.published, 0),
+    sourceRuns,
     elapsedMs: Date.now() - startedAt,
   };
 }

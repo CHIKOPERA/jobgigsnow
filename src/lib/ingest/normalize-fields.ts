@@ -3,6 +3,7 @@
  * unit-testable directly (mirrors discovery-diff.ts / job-filters.ts).
  */
 import type { AggregationResult } from "./types";
+import { toEditorHtml } from "@/lib/job-rich-text";
 
 export interface NormalizedFields {
   title: string;
@@ -60,7 +61,7 @@ export function buildNormalizedFields(aggregation: AggregationResult, externalUr
       salaryMax: normalized.salaryMin !== null ? normalized.salaryMax : null,
       salaryCurrency: normalized.salaryMin !== null ? normalized.salaryCurrency : null,
       salaryPeriod: normalized.salaryPeriod,
-      description: normalized.description!,
+      description: toEditorHtml(normalized.description!),
       tags: normalized.skills,
       // No apply link found or inferred — the safe default is the page itself, since that's
       // always a valid way to apply (never null, never a fabricated URL).

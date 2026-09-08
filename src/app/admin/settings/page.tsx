@@ -13,10 +13,8 @@ export default async function AdminSettingsPage() {
       <div>
         <h1 className="text-title font-semibold">Settings</h1>
         <p className="mt-1 max-w-2xl text-meta text-ink-muted">
-          Runs automatically after AI aggregation, before a job reaches review — it rewrites the
-          title, description, and tags for search visibility. The result is what you see first in{" "}
-          <span className="font-medium text-ink">Review</span>; the &quot;Rewrite with AI&quot;
-          button there re-applies this same prompt as an adjustment, not a separate tool.
+          Optional rewrite template for manual polishing. The importer now uses one AI extraction
+          pass, then publishes the job and adds the first Pexels image when available.
         </p>
       </div>
       <SettingsForm initialPrompt={seoRewritePrompt} />

@@ -70,13 +70,13 @@ export function RunProgress({ runId, initial }: { runId: string; initial: RunSna
       value: percent(progress.acquisitionComplete, progress.rawTotal, discoveryPercent),
     },
     {
-      label: "AI aggregation",
-      detail: `${progress.aggregationComplete}/${progress.aggregationTotal} enriched`,
+      label: "Rewrite",
+      detail: `${progress.aggregationComplete}/${progress.aggregationTotal} processed`,
       value: percent(progress.aggregationComplete, progress.aggregationTotal, progress.rawTotal === 0 ? 0 : 100),
     },
     {
-      label: "Admin review",
-      detail: `${progress.reviewReady} ready · ${progress.published} published`,
+      label: "Publish",
+      detail: `${progress.reviewReady} drafts · ${progress.published} published`,
       value: progress.aggregationComplete === 0 ? 0 : percent(progress.reviewReady + progress.published, progress.aggregationComplete),
     },
   ];

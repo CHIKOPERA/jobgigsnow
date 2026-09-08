@@ -3,6 +3,7 @@ import { Schibsted_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { site } from "@/config";
+import { buildSiteSchemas, serializeJsonLd } from "@/lib/job-seo";
 import { SiteShell } from "@/components/nav/SiteShell";
 import { Header } from "@/components/nav/Header";
 import { TabBar } from "@/components/nav/TabBar";
@@ -28,13 +29,31 @@ export const metadata: Metadata = {
   description: site.description,
   applicationName: site.name,
   robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    title: site.name,
+    description: site.description,
+    url: site.url,
+    siteName: site.name,
+    locale: "en_ZA",
+  },
+  twitter: { card: "summary", title: site.name, description: site.description },
+  formatDetection: { telephone: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+  const siteSchemas = buildSiteSchemas(site.name, site.description, site.url);
   return (
     <ClerkProvider>
-      <html lang="en" className={`${schibstedGrotesk.variable} h-full antialiased`}>
+      <html lang="en-ZA" className={`${schibstedGrotesk.variable} h-full antialiased`}>
         <body className="min-h-full flex flex-col bg-bg text-ink font-sans text-body">
+          {siteSchemas.map((schema) => (
+            <script
+              key={schema["@type"]}
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: serializeJsonLd(schema) }}
+            />
+          ))}
           <SiteShell header={<Header />} footer={<Footer />} tabBar={<TabBar />}>
             {children}
           </SiteShell>

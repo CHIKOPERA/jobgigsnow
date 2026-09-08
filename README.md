@@ -1,9 +1,35 @@
-# JobGigsNow — Phase 1
+# JobGigsNow
 
-A job board web app. This is **Phase 1 — Posting**: the public-facing job board (browse, search,
-filter, job detail, saved jobs), reading from a schema shaped so phase-2 crawler/rewriter workers
-can plug in later with no UI changes. See `jobgigsnow/prompt.md` for the original brief and
-`docs/todo/` for what's done and what's deliberately deferred.
+A job board with a simple publishing flow: **sources → fetch → rewrite → first Pexels image → publish**.
+
+Add sources in the admin and use **Fetch jobs** to import that source immediately. Enabled
+sources are also checked on their schedule by the cron worker. Each job URL is captured,
+rewritten, paired with the first Pexels image when one can be saved, and published. Image
+search/storage failures do not block publication.
+
+The normal importer is one path used by the admin button, single-job import, and cron. One failed
+job is recorded and skipped while the rest of the source continues. Manual editing remains
+available for published jobs and unfinished drafts.
+
+The admin focuses on Sources, Drafts, and Content. HTML sources have a simple careers URL and
+job-link selector form; provider-specific settings remain available in advanced setup.
+
+## Page capture with Jina
+
+Jina Reader is enabled by default for ordinary job details, including single-URL imports.
+No API key or extra service is required for basic access. It returns text that goes directly
+into the existing rewrite pipeline. Workday, Oracle, Cornerstone, and SmartRecruiters keep
+their direct API integrations. Listing-page discovery keeps its existing selectors and fetcher.
+
+Optional server environment variables:
+- `JINA_API_KEY`: authenticated access; Jina token billing applies.
+- `JINA_ENABLED=false`: use the legacy direct HTML detail fetcher.
+
+Requests are paced at one every 3.1 seconds per server process, including requests for different
+source domains. Multiple server instances share Jina's external quota but not this local gate.
+Robots rules still apply; empty responses, source HTTP failures, and recognized challenge pages
+are rejected instead of sent to the rewriter. Authentication errors and rate limits are reported
+without immediate repeated requests.
 
 ## Stack
 Next.js 16 (App Router, TypeScript) · Prisma 7 (PostgreSQL) · Clerk (saved jobs/searches/alerts

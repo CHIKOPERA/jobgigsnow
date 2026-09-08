@@ -68,6 +68,9 @@ Instructions:
 - Prefer the deterministic values above when present and plausible. Only replace title, company,
   location, description, or applyUrl if the deterministic value is clearly wrong given the page
   content.
+- Return description as a concise, publish-ready HTML fragment using only paragraphs, h2/h3,
+  bullet or numbered lists, strong, em, and links already present on the page. Keep factual
+  requirements, responsibilities, benefits, dates, salaries, and locations faithful to the source.
 - remoteType and employmentType are required on every job record, so make your best good-faith
   reading whenever the content gives any signal, and treat direct keywords as high confidence
   (0.8+), not as something to be cautious about — this is reading stated content, not inventing:

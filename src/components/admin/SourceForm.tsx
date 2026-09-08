@@ -3,23 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const CRAWL_CONFIG_TEMPLATE = JSON.stringify(
-  {
-    provider: "html",
-    listingUrls: ["https://example.com/careers"],
-    linkSelector: "a.job-link",
-    linkAttr: "href",
-    detailSelectors: {
-      title: "h1",
-      company: ".company-name",
-      location: ".job-location",
-      description: ".job-description",
-    },
-  },
-  null,
-  2,
-);
-
 interface SourceFormProps {
   mode: "create" | "edit";
   sourceId?: string;
@@ -38,8 +21,9 @@ export function SourceForm({ mode, sourceId, initial }: SourceFormProps) {
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [cadenceMinutes, setCadenceMinutes] = useState(String(initial?.cadenceMinutes ?? 360));
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const [advanced, setAdvanced] = useState(false);
   const [crawlConfigText, setCrawlConfigText] = useState(
-    initial ? JSON.stringify(initial.crawlConfig, null, 2) : CRAWL_CONFIG_TEMPLATE,
+    initial ? JSON.stringify(initial.crawlConfig, null, 2) : "",
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,9 +34,15 @@ export function SourceForm({ mode, sourceId, initial }: SourceFormProps) {
 
     let crawlConfig: unknown;
     try {
-      crawlConfig = JSON.parse(crawlConfigText);
+      crawlConfig = initial || advanced
+        ? JSON.parse(crawlConfigText)
+        : { provider: "html", listingUrls: [baseUrl], linkSelector: "a[href]", linkAttr: "href" };
+
+      if (initial && crawlConfig && typeof crawlConfig === "object" && "provider" in crawlConfig && crawlConfig.provider === "html" && "listingUrls" in crawlConfig && Array.isArray(crawlConfig.listingUrls) && crawlConfig.listingUrls[0] === initial.baseUrl) {
+        crawlConfig = { ...crawlConfig, listingUrls: [baseUrl, ...crawlConfig.listingUrls.slice(1)] };
+      }
     } catch {
-      setError("crawlConfig is not valid JSON.");
+      setError("Check the advanced configuration: it must be valid JSON.");
       return;
     }
 
@@ -76,6 +66,24 @@ export function SourceForm({ mode, sourceId, initial }: SourceFormProps) {
     }
   }
 
+  async function removeSource() {
+    if (!sourceId || !window.confirm(`Remove ${name}? Published jobs will stay live.`)) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/sources/${sourceId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error?.message ?? "The source could not be removed.");
+      }
+      router.push("/admin/sources");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The source could not be removed.");
+      setSubmitting(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex max-w-2xl flex-col gap-4">
       <label className="flex flex-col gap-1">
@@ -89,52 +97,57 @@ export function SourceForm({ mode, sourceId, initial }: SourceFormProps) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-label uppercase tracking-[0.05em] text-ink-muted">Base URL</span>
+        <span className="text-label uppercase tracking-[0.05em] text-ink-muted">Careers page URL</span>
         <input
           required
           type="url"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="https://example.com"
+          placeholder="https://example.com/careers"
           className="focus-ring h-11 rounded-md border border-line bg-surface px-3 text-body"
         />
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-label uppercase tracking-[0.05em] text-ink-muted">Cadence (minutes)</span>
-        <input
-          required
-          type="number"
-          min={5}
-          value={cadenceMinutes}
-          onChange={(e) => setCadenceMinutes(e.target.value)}
-          className="focus-ring h-11 w-40 rounded-md border border-line bg-surface px-3 text-body"
-        />
-      </label>
+      <p className="rounded-md bg-accent-mint/25 px-4 py-3 text-meta text-ink-muted">
+        That’s enough for most careers pages. We’ll find the job links automatically.
+      </p>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          className="focus-ring size-5 rounded-sm border border-line-strong"
-        />
-        <span className="text-meta text-ink">Enabled</span>
-      </label>
+      <details className="rounded-md border border-line bg-surface p-3">
+        <summary className="cursor-pointer text-meta font-medium">Technical setup</summary>
+        {mode === "create" && (
+          <label className="mt-3 flex items-center gap-2 text-meta">
+            <input type="checkbox" checked={advanced} onChange={(event) => {
+              if (event.target.checked && !crawlConfigText) {
+                setCrawlConfigText(JSON.stringify({ provider: "html", listingUrls: [baseUrl], linkSelector: "a[href]", linkAttr: "href" }, null, 2));
+              }
+              setAdvanced(event.target.checked);
+            }} />
+            Use a custom source configuration
+          </label>
+        )}
+        {(mode === "edit" || advanced) && (
+          <label className="mt-3 flex flex-col gap-1">
+            <span className="text-label uppercase tracking-[0.05em] text-ink-muted">Source configuration (JSON)</span>
+            <textarea required value={crawlConfigText} onChange={(event) => setCrawlConfigText(event.target.value)} rows={14} spellCheck={false}
+              className="focus-ring rounded-md border border-line bg-surface-sunk p-3 font-mono text-[13px] leading-relaxed text-ink" />
+            <span className="text-[12px] text-ink-muted">Only change this for Workday or another supported hiring platform.</span>
+          </label>
+        )}
+      </details>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-label uppercase tracking-[0.05em] text-ink-muted">
-          Crawl config (JSON — discovery selectors, owned entirely by the crawler)
-        </span>
-        <textarea
-          required
-          value={crawlConfigText}
-          onChange={(e) => setCrawlConfigText(e.target.value)}
-          rows={14}
-          spellCheck={false}
-          className="focus-ring rounded-md border border-line bg-surface-sunk p-3 font-mono text-[13px] leading-relaxed text-ink"
-        />
-      </label>
+      <details className="rounded-md border border-line p-3">
+        <summary className="cursor-pointer text-meta font-medium">Schedule</summary>
+        <label className="mt-3 flex flex-col gap-1 text-meta">
+          Check every (minutes)
+          <input required type="number" min={5} value={cadenceMinutes}
+            onChange={(event) => setCadenceMinutes(event.target.value)}
+            className="focus-ring h-11 w-40 rounded-md border border-line bg-surface px-3" />
+        </label>
+        <label className="mt-3 flex items-center gap-2 text-meta">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          Automatically check this source
+        </label>
+      </details>
 
       {error && <p className="text-meta text-danger">{error}</p>}
 
@@ -146,6 +159,16 @@ export function SourceForm({ mode, sourceId, initial }: SourceFormProps) {
       >
         {submitting ? "Saving…" : mode === "create" ? "Create source" : "Save changes"}
       </button>
+
+      {mode === "edit" && (
+        <details className="mt-4 border-t border-line pt-4">
+          <summary className="cursor-pointer text-meta text-ink-muted">Remove this source</summary>
+          <p className="mt-3 text-meta text-ink-muted">Its published jobs will stay live.</p>
+          <button type="button" onClick={removeSource} disabled={submitting} className="focus-ring mt-3 rounded-pill border border-danger/30 px-4 py-2 text-meta font-semibold text-danger hover:bg-danger/10 disabled:opacity-50">
+            Remove source
+          </button>
+        </details>
+      )}
     </form>
   );
 }

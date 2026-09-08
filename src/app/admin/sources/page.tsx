@@ -11,57 +11,40 @@ export default async function AdminSourcesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-title font-semibold">Sources</h1>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><h1 className="text-title font-semibold">Careers sources</h1><p className="mt-2 text-body text-ink-muted">Companies checked automatically for new jobs.</p></div>
         <Link
           href="/admin/sources/new"
           className="focus-ring flex h-10 items-center rounded-pill bg-ink px-4 text-meta font-medium text-surface"
         >
-          New source
+          Add source
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-line">
-        <table className="w-full min-w-[900px] text-meta">
-          <thead>
-            <tr className="border-b border-line bg-surface-sunk text-left text-label uppercase text-ink-muted">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Base URL</th>
-              <th className="px-3 py-2">Cadence</th>
-              <th className="px-3 py-2">Enabled</th>
-              <th className="px-3 py-2">Last run</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sources.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-ink-muted">
-                  No sources yet — create one to start crawling.
-                </td>
-              </tr>
-            )}
-            {sources.map((source) => (
-              <tr key={source.id} className="border-b border-line last:border-0 hover:bg-surface-sunk">
-                <td className="px-3 py-2">
-                  <Link href={`/admin/sources/${source.id}`} className="focus-ring rounded-sm font-medium text-ink">
-                    {source.name}
-                  </Link>
-                </td>
-                <td className="px-3 py-2 text-ink-muted">{source.baseUrl}</td>
-                <td className="px-3 py-2">{source.cadenceMinutes}m</td>
-                <td className="px-3 py-2">{source.enabled ? "Yes" : "No"}</td>
-                <td className="px-3 py-2 text-ink-muted">
-                  {source.lastRunAt ? new Date(source.lastRunAt).toLocaleString() : "Never"}
-                </td>
-                <td className="px-3 py-2">
-                  <SourceRowActions sourceId={source.id} sourceName={source.name} initiallyEnabled={source.enabled} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {sources.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center">
+          <p className="text-title font-semibold">Add your first careers page</p>
+          <p className="mt-2 text-meta text-ink-muted">We’ll check it for jobs and publish new listings automatically.</p>
+          <Link href="/admin/sources/new" className="focus-ring mt-5 inline-flex h-11 items-center rounded-pill bg-ink px-5 text-meta font-semibold text-surface">Add source</Link>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {sources.map((source) => (
+            <article key={source.id} className="rounded-lg border border-line bg-surface p-4 md:flex md:items-center md:justify-between md:gap-6">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`size-2 rounded-full ${source.enabled ? "bg-accent-mint" : "bg-line-strong"}`} aria-hidden="true" />
+                  <Link href={`/admin/sources/${source.id}`} className="focus-ring truncate rounded-sm text-body font-semibold hover:underline">{source.name}</Link>
+                  <span className="text-[11px] text-ink-muted">{source.enabled ? "Active" : "Paused"}</span>
+                </div>
+                <p className="mt-1 truncate text-meta text-ink-muted">{source.baseUrl}</p>
+                <p className="mt-2 text-[12px] text-ink-muted">Last checked {source.lastRunAt ? new Date(source.lastRunAt).toLocaleString() : "never"}</p>
+              </div>
+              <div className="mt-4 md:mt-0"><SourceRowActions sourceId={source.id} initiallyEnabled={source.enabled} /></div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

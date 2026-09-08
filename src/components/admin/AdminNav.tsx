@@ -4,14 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const DESTINATIONS = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/crawl", label: "Quick crawl" },
-  { href: "/admin/review", label: "Review" },
-  { href: "/admin/content", label: "Content" },
-  { href: "/admin/runs", label: "Runs" },
+  { href: "/admin", label: "Dashboard" },
   { href: "/admin/sources", label: "Sources" },
-  { href: "/admin/failures", label: "Failures" },
-  { href: "/admin/settings", label: "Settings" },
+  { href: "/admin/content", label: "Jobs" },
 ];
 
 export function AdminNav() {
@@ -26,7 +21,7 @@ export function AdminNav() {
           </span>
           <span className="hidden leading-tight sm:block">
             <span className="block text-meta font-semibold">JobGigsNow</span>
-            <span className="block text-[10px] uppercase tracking-[0.14em] text-surface/50">Admin studio</span>
+            <span className="block text-[10px] uppercase tracking-[0.14em] text-surface/50">Publishing</span>
           </span>
         </Link>
         <ul className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -51,12 +46,17 @@ export function AdminNav() {
             );
           })}
         </ul>
-        <Link
-          href="/jobs"
-          className="focus-ring hidden shrink-0 rounded-pill px-3 py-2 text-meta font-medium text-surface/65 hover:bg-surface/10 hover:text-surface md:block"
-        >
-          View site ↗
-        </Link>
+        <div className="flex shrink-0 items-center gap-1">
+          <Link href="/admin/crawl" className="focus-ring rounded-pill bg-accent-mint px-3 py-2 text-meta font-semibold text-ink">
+            Import job
+          </Link>
+          <Link href="/admin/settings" aria-label="Settings" className="focus-ring rounded-pill px-3 py-2 text-meta text-surface/65 hover:bg-surface/10 hover:text-surface">
+            Settings
+          </Link>
+          <Link href="/jobs" aria-label="View public site" className="focus-ring hidden rounded-pill px-3 py-2 text-meta text-surface/65 hover:bg-surface/10 hover:text-surface lg:block">
+            Site ↗
+          </Link>
+        </div>
       </div>
     </nav>
   );

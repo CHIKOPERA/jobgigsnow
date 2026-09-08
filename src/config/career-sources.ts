@@ -55,7 +55,6 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
-      jsRendering: true,
       listingUrls: ["https://woodlandsdairy.simplify.hr/vacancy/vacancies?query=&displayOrder=4"],
       linkSelector: 'a[href^="/Vacancy/"]',
       linkAttr: "href",
@@ -163,7 +162,6 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
-      jsRendering: true,
       listingUrls: avbobPages,
       linkSelector: '.st-custom-button[data-network="facebook"][data-url]',
       linkAttr: "data-url",
@@ -227,7 +225,6 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
-      jsRendering: true,
       listingUrls: ["https://bidvestfacilitiesmanagement.simplify.hr/vacancy/vacancies?query=&displayOrder=0"],
       linkSelector: 'a[href^="/Vacancy/"]',
       linkAttr: "href",

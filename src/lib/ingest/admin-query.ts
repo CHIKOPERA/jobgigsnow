@@ -202,29 +202,21 @@ export async function getDashboardStats() {
 }
 
 export async function listReviewJobs() {
-  const [pending, recentlyPublished] = await Promise.all([
-    prisma.job.findMany({
-      where: { status: { in: ["READY", "IMPROVING"] } },
-      orderBy: { updatedAt: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        location: true,
-        updatedAt: true,
-        company: { select: { name: true } },
-        rawJob: { select: { source: { select: { name: true } } } },
-      },
-    }),
-    prisma.job.findMany({
-      where: { status: "PUBLISHED" },
-      orderBy: { updatedAt: "desc" },
-      take: 12,
-      select: { id: true, slug: true, title: true, updatedAt: true, company: { select: { name: true } } },
-    }),
-  ]);
-  return { pending, recentlyPublished };
+  const pending = await prisma.job.findMany({
+    where: { status: { in: ["READY", "IMPROVING"] } },
+    orderBy: { updatedAt: "desc" },
+    take: 100,
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      location: true,
+      updatedAt: true,
+      company: { select: { name: true } },
+      rawJob: { select: { source: { select: { name: true } } } },
+    },
+  });
+  return { pending };
 }
 
 export async function listPublishedJobs({

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { opportunityCategories } from "@/config/categories";
 import { listPublishedJobs } from "@/lib/ingest/admin-query";
 
-export const metadata: Metadata = { title: "Admin — Published content" };
+export const metadata: Metadata = { title: "Admin — Published jobs" };
 export const dynamic = "force-dynamic";
 
 type Category = keyof typeof opportunityCategories;
@@ -31,11 +31,11 @@ export default async function PublishedContentPage({
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-label uppercase tracking-[0.1em] text-ink-muted">Content library</p>
-          <h1 className="mt-2 text-h2 font-medium">Published content</h1>
-          <p className="mt-2 text-body text-ink-muted">Browse and manage every job currently visible on the public site.</p>
+          <p className="text-label uppercase tracking-[0.1em] text-ink-muted">Live on the site</p>
+          <h1 className="mt-2 text-h2 font-medium">Published jobs</h1>
+          <p className="mt-2 text-body text-ink-muted">Find, edit or view any job currently visible to visitors.</p>
         </div>
-        <Link href="/admin/content/new" className="focus-ring inline-flex h-11 items-center rounded-pill bg-ink px-5 text-meta font-semibold text-surface">Add new content</Link>
+        <Link href="/admin/content/new" className="focus-ring inline-flex h-11 items-center rounded-pill bg-ink px-5 text-meta font-semibold text-surface">Add job manually</Link>
       </div>
 
       <form className="grid gap-3 rounded-lg border border-line bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_240px_auto]">

@@ -15,17 +15,17 @@ function sleep(ms: number) {
 }
 
 /** Resolves once a slot for `hostname` is free; call the returned function when done. */
-export async function acquireHostSlot(hostname: string): Promise<() => void> {
+export async function acquireHostSlot(hostname: string, minDelayMs: number = sources.perHostMinDelayMs): Promise<() => void> {
   for (;;) {
     const current = inFlight.get(hostname) ?? 0;
     const elapsedSinceLast = Date.now() - (lastFetchAt.get(hostname) ?? 0);
 
-    if (current < sources.perHostConcurrency && elapsedSinceLast >= sources.perHostMinDelayMs) {
+    if (current < sources.perHostConcurrency && elapsedSinceLast >= minDelayMs) {
       inFlight.set(hostname, current + 1);
       lastFetchAt.set(hostname, Date.now());
       return () => inFlight.set(hostname, Math.max(0, (inFlight.get(hostname) ?? 1) - 1));
     }
 
-    await sleep(Math.max(50, sources.perHostMinDelayMs - elapsedSinceLast));
+    await sleep(Math.max(50, minDelayMs - elapsedSinceLast));
   }
 }
