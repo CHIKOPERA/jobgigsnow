@@ -11,7 +11,15 @@ import {
   isSuspiciousEmptyDiscovery,
 } from "./discovery-diff";
 import { isAllowedByRobots } from "./robots";
-import { failRun, finalizeRunIfComplete, incrementRunCounters, recordFailure, startIngestRun } from "./run-tracking";
+import {
+  failRun,
+  finalizeRunIfComplete,
+  incrementRunCounters,
+  recordFailure,
+  resolveDiscoveryFailuresForSource,
+  startIngestRun,
+  updateRunActivity,
+} from "./run-tracking";
 import { buildSmartRecruitersPageUrl, parseSmartRecruitersPage } from "./smartrecruiters";
 import { discoverCornerstone } from "./cornerstone";
 import { discoverOracle } from "./oracle";
@@ -162,6 +170,7 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
   const now = new Date();
 
   try {
+    await updateRunActivity(run.id, "DISCOVERING");
     const listingErrors: { url: string; message: string }[] = [];
     let liveUrlsRaw: string[];
     try {
@@ -285,6 +294,7 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
     });
 
     await prisma.source.update({ where: { id: sourceId }, data: { lastRunAt: now } });
+    if (listingErrors.length === 0) await resolveDiscoveryFailuresForSource(sourceId);
     await finalizeRunIfComplete(run.id);
 
     // Finalize any old runs whose jobs were just reassigned to this run — they're now empty

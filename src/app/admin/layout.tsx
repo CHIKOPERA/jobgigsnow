@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { SignInButton } from "@clerk/nextjs";
 import { requireAdmin } from "@/lib/admin-auth";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Administration",
@@ -41,9 +42,19 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     );
   }
 
+  const [readyCount, openFailures] = await Promise.all([
+    prisma.job.count({ where: { status: "READY", OR: [{ rawJobId: null }, { rawJob: { needsAggregation: false } }] } }),
+    prisma.ingestFailure.findMany({
+      where: { status: { in: ["OPEN", "RETRYING"] } },
+      select: { id: true, rawJobId: true },
+      take: 250,
+    }),
+  ]);
+  const issueCount = new Set(openFailures.map((failure) => failure.rawJobId ?? failure.id)).size;
+
   return (
     <div className="min-h-screen w-full bg-bg">
-      <AdminNav />
+      <AdminNav readyCount={readyCount} issueCount={issueCount} />
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-10">{children}</main>
     </div>
   );

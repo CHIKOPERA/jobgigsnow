@@ -65,7 +65,7 @@ export type DeleteSourceOutcome = "deleted" | "not_found" | "run_in_progress";
 export async function deleteSource(id: string): Promise<DeleteSourceOutcome> {
   const source = await prisma.source.findUnique({
     where: { id },
-    select: { id: true, ingestRuns: { where: { status: "RUNNING" }, take: 1, select: { id: true } } },
+    select: { id: true, ingestRuns: { where: { status: { in: ["RUNNING", "PAUSED"] } }, take: 1, select: { id: true } } },
   });
   if (!source) return "not_found";
   if (source.ingestRuns.length > 0) return "run_in_progress";

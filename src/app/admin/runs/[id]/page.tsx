@@ -5,7 +5,7 @@ import { getRunDetail } from "@/lib/ingest/admin-query";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
 import { StatTile } from "@/components/admin/StatTile";
 import { RunProgress } from "@/components/admin/RunProgress";
-import { StopRunButton } from "@/components/admin/StopRunButton";
+import { RunControls } from "@/components/admin/RunControls";
 
 export const metadata: Metadata = { title: "Admin — Run detail" };
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
           </h1>
           <RunStatusBadge status={run.status} />
         </div>
-        {run.status === "RUNNING" && <StopRunButton runId={run.id} />}
+        {(run.status === "RUNNING" || run.status === "PAUSED") && <RunControls runId={run.id} initialStatus={run.status} />}
       </div>
 
       <p className="text-meta text-ink-muted">
@@ -117,6 +117,7 @@ export default async function AdminRunDetailPage({ params }: { params: Promise<{
                 <span>{new Date(failure.createdAt).toLocaleString()}</span>
               </div>
               <p className="mt-1 text-meta text-ink">{failure.message}</p>
+              <p className="mt-1 text-[11px] text-ink-muted">{failure.status.toLowerCase()}</p>
               {failure.rawJobId && (
                 <Link href={`/admin/raw-jobs/${failure.rawJobId}`} className="focus-ring mt-1 inline-block rounded-sm text-meta text-ink-muted hover:text-ink">
                   View raw job →

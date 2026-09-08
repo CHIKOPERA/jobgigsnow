@@ -1,7 +1,8 @@
-type Status = "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+type Status = "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 const STYLES: Record<Status, string> = {
   RUNNING: "bg-accent-iris text-ink",
+  PAUSED: "bg-surface-sunk text-ink-muted",
   COMPLETED: "bg-accent-mint text-ink",
   FAILED: "bg-danger text-surface",
   CANCELLED: "bg-surface-sunk text-ink-muted",

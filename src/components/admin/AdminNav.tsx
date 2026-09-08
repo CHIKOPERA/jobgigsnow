@@ -5,11 +5,12 @@ import { usePathname } from "next/navigation";
 
 const DESTINATIONS = [
   { href: "/admin", label: "Dashboard" },
-  { href: "/admin/sources", label: "Sources" },
   { href: "/admin/content", label: "Jobs" },
+  { href: "/admin/sources", label: "Sources" },
+  { href: "/admin/activity", label: "Activity" },
 ];
 
-export function AdminNav() {
+export function AdminNav({ readyCount, issueCount }: { readyCount: number; issueCount: number }) {
   const pathname = usePathname();
 
   return (
@@ -26,7 +27,13 @@ export function AdminNav() {
         </Link>
         <ul className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {DESTINATIONS.map((item) => {
-            const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+            const isActive = item.href === "/admin"
+              ? pathname === "/admin"
+              : item.href === "/admin/content"
+                ? pathname.startsWith("/admin/content") || pathname.startsWith("/admin/review")
+                : item.href === "/admin/activity"
+                  ? pathname.startsWith("/admin/activity") || pathname.startsWith("/admin/runs") || pathname.startsWith("/admin/failures") || pathname.startsWith("/admin/raw-jobs")
+                  : pathname.startsWith(item.href);
             return (
               <li key={item.href}>
                 <Link
@@ -41,6 +48,8 @@ export function AdminNav() {
                   style={{ transitionDuration: "var(--dur-state)" }}
                 >
                   {item.label}
+                  {item.href === "/admin/content" && readyCount > 0 && <span className="ml-1.5 rounded-pill bg-danger/90 px-1.5 py-0.5 text-[10px] text-white">{readyCount}</span>}
+                  {item.href === "/admin/activity" && issueCount > 0 && <span className="ml-1.5 rounded-pill bg-danger/90 px-1.5 py-0.5 text-[10px] text-white">{issueCount}</span>}
                 </Link>
               </li>
             );

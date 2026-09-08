@@ -19,11 +19,17 @@ import { hashAggregationInput } from "./hash";
 import { upsertJob } from "./job-service";
 import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
-import { finalizeRunIfComplete, incrementRunCounters, recordFailure } from "./run-tracking";
+import {
+  finalizeRunIfComplete,
+  incrementRunCounters,
+  recordFailure,
+  resolveFailuresForRawJob,
+  updateRunActivity,
+} from "./run-tracking";
 import type { RawExtractionBundle } from "./types";
 import type { ImportProgressReporter, ImportStage } from "./progress-types";
 
-type JobStageReporter = (stage: ImportStage, jobTitle?: string) => void;
+type JobStageReporter = (stage: ImportStage, jobTitle?: string) => void | Promise<void>;
 
 function timeBudget(startedAt: number): boolean {
   return Date.now() - startedAt < ingest.tickTimeBudgetMs;
@@ -77,6 +83,7 @@ interface AcquisitionCandidate {
   ingestRunId: string | null;
   contentHash: string;
   updatedAt: Date;
+  rawTitle: string | null;
   source: { crawlConfig: unknown } | null;
   ingestRun: { status: IngestRunStatus } | null;
 }
@@ -92,7 +99,7 @@ async function processAcquisition(row: AcquisitionCandidate, report?: JobStageRe
   if (claim.count === 0) return "skipped";
 
   try {
-    report?.("capturing");
+    await report?.("capturing", row.rawTitle ?? undefined);
     const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
 
     const acquired = await acquirePage(row.externalUrl, config);
@@ -151,6 +158,7 @@ async function processAcquisition(row: AcquisitionCandidate, report?: JobStageRe
     if (!isFirstFetch) {
       await maybeIncrementCounters(row.ingestRunId, changed ? { changedCount: 1 } : { unchangedCount: 1 });
     }
+    await resolveFailuresForRawJob(row.id, ["ACQUISITION", "EXTRACTION"]);
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
     return "fetched";
   } catch (err) {
@@ -182,6 +190,7 @@ interface AggregationCandidate {
   externalUrl: string;
   ingestRunId: string | null;
   payload: unknown;
+  rawTitle: string | null;
   ingestRun: { status: IngestRunStatus } | null;
 }
 
@@ -197,7 +206,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
   if (claim.count === 0) return "skipped";
 
   try {
-    report?.("rewriting");
+    await report?.("rewriting", row.rawTitle ?? undefined);
     const bundle = row.payload as unknown as RawExtractionBundle;
 
     const { result, inputTokens, outputTokens } = await aggregate({
@@ -240,7 +249,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
     } else {
       const job = await upsertJob(normalized.input);
 
-      report?.("image", normalized.input.title);
+      await report?.("image", normalized.input.title);
       await prepareAutomaticPublication(
         () => searchPexels(normalized.input.title, 1),
         async (photo) => ({
@@ -249,8 +258,8 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
           socialImageCredit: `Photo by ${photo.photographer} on Pexels`,
           socialImageSourceUrl: photo.photographerUrl,
         }),
-        (image) => {
-          report?.("publishing", normalized.input.title);
+        async (image) => {
+          await report?.("publishing", normalized.input.title);
           return prisma.job.update({
             where: { id: job.id },
             data: {
@@ -283,6 +292,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
         prisma.rawJob.update({ where: { id: row.id }, data: { needsAggregation: false } }),
         ...improvementRunCreates,
       ]);
+      await resolveFailuresForRawJob(row.id);
     }
 
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
@@ -316,6 +326,7 @@ export async function processQueuedRawJob(rawJobId: string, report?: JobStageRep
       ingestRunId: true,
       contentHash: true,
       updatedAt: true,
+      rawTitle: true,
       fetchStatus: true,
       lastCrawledAt: true,
       source: { select: { crawlConfig: true } },
@@ -342,6 +353,7 @@ export async function processQueuedRawJob(rawJobId: string, report?: JobStageRep
       externalUrl: true,
       ingestRunId: true,
       payload: true,
+      rawTitle: true,
       fetchStatus: true,
       needsAggregation: true,
       ingestRun: { select: { status: true } },
@@ -432,8 +444,10 @@ async function processRunJobs(runId: string, startedAt: number, report?: ImportP
 
   for (const [index, row] of rows.entries()) {
     if (!timeBudget(startedAt)) break;
+    const currentRun = await prisma.ingestRun.findUnique({ where: { id: runId }, select: { status: true } });
+    if (currentRun?.status !== "RUNNING") break;
     const current = index + 1;
-    const outcome = await processQueuedRawJob(row.id, (stage, jobTitle) => {
+    const outcome = await processQueuedRawJob(row.id, async (stage, jobTitle) => {
       const label = jobTitle ?? `job ${current} of ${rows.length}`;
       const messages: Partial<Record<ImportStage, string>> = {
         capturing: `Capturing ${label}…`,
@@ -441,6 +455,7 @@ async function processRunJobs(runId: string, startedAt: number, report?: ImportP
         image: `Finding an image for ${label}…`,
         publishing: `Publishing ${label}…`,
       };
+      await updateRunActivity(runId, stage.toUpperCase(), jobTitle ?? label);
       emit(stage, messages[stage] ?? `Processing ${label}…`, current, jobTitle);
     });
     result.processed += 1;
@@ -462,6 +477,23 @@ async function processRunJobs(runId: string, startedAt: number, report?: ImportP
 /** One clear source import: discover URLs, process each URL, publish every valid job. */
 export async function importSource(sourceId: string, startedAt = Date.now(), report?: ImportProgressReporter): Promise<SimpleImportResult> {
   const source = await prisma.source.findUnique({ where: { id: sourceId }, select: { name: true, enabled: true } });
+  const activeRun = await prisma.ingestRun.findFirst({
+    where: { sourceId, status: { in: ["RUNNING", "PAUSED"] } },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, status: true, discoveredCount: true },
+  });
+  if (activeRun) {
+    if (activeRun.status === "RUNNING") return processRunJobs(activeRun.id, startedAt, report);
+    return {
+      ingestRunId: activeRun.id,
+      found: activeRun.discoveredCount,
+      processed: 0,
+      published: 0,
+      skipped: 0,
+      failed: 0,
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
   if (source?.enabled) {
     report?.({ type: "progress", stage: "discovering", message: `Checking ${source.name} for new jobs…`, sourceName: source.name, found: 0, processed: 0, published: 0, skipped: 0, failed: 0 });
   }
@@ -473,8 +505,8 @@ export async function importSource(sourceId: string, startedAt = Date.now(), rep
 }
 
 /** Compatibility wrapper for old callers that already have a run id. */
-export async function processSourceRun(runId: string, startedAt = Date.now()): Promise<void> {
-  await processRunJobs(runId, startedAt);
+export async function processSourceRun(runId: string, startedAt = Date.now(), report?: ImportProgressReporter): Promise<SimpleImportResult> {
+  return processRunJobs(runId, startedAt, report);
 }
 
 export interface TickResult {
@@ -505,14 +537,14 @@ export async function runTick(report?: ImportProgressReporter): Promise<TickResu
 
   for (const sourceId of dueSourceIds) {
     if (!timeBudget(startedAt)) break;
-    const alreadyRunning = await prisma.ingestRun.findFirst({
-      where: { sourceId, status: "RUNNING" },
-      select: { id: true },
+    const alreadyActive = await prisma.ingestRun.findFirst({
+      where: { sourceId, status: { in: ["RUNNING", "PAUSED"] } },
+      select: { id: true, status: true },
     });
-    if (alreadyRunning) {
-      if (!activeRunIds.has(alreadyRunning.id)) {
-        activeRunIds.add(alreadyRunning.id);
-        sourceRuns.push(await processRunJobs(alreadyRunning.id, startedAt, report));
+    if (alreadyActive) {
+      if (alreadyActive.status === "RUNNING" && !activeRunIds.has(alreadyActive.id)) {
+        activeRunIds.add(alreadyActive.id);
+        sourceRuns.push(await processRunJobs(alreadyActive.id, startedAt, report));
       }
       continue;
     }

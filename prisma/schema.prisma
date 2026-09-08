@@ -101,6 +101,7 @@ model RawJob {
 
 enum IngestRunStatus {
   RUNNING
+  PAUSED
   COMPLETED
   FAILED
   CANCELLED
@@ -126,6 +127,10 @@ model IngestRun {
   failedCount           Int             @default(0)
   validationFailedCount Int             @default(0)
   aiFailedCount         Int             @default(0)
+  /// Durable activity shown in admin after refresh/navigation; cleared when a run finishes.
+  currentStage          String?
+  currentJobTitle       String?
+  heartbeatAt           DateTime?
 
   rawJobs  RawJob[]
   failures IngestFailure[]
@@ -144,6 +149,13 @@ enum IngestFailureStage {
   SEO_REWRITE
 }
 
+enum IngestFailureStatus {
+  OPEN
+  RETRYING
+  RESOLVED
+  DISMISSED
+}
+
 /// Human-readable per-URL error detail — nothing else in the schema captures more than a bare
 /// enum status, and "failed extractions can be inspected" needs an actual message/detail payload.
 model IngestFailure {
@@ -156,11 +168,14 @@ model IngestFailure {
   url         String?
   message     String
   detail      Json?
+  status      IngestFailureStatus @default(OPEN)
+  resolvedAt  DateTime?
   createdAt   DateTime           @default(now())
 
   @@index([ingestRunId])
   @@index([rawJobId])
   @@index([stage])
+  @@index([status, createdAt])
 }
 
 // ---------------------------------------------------------------------------
