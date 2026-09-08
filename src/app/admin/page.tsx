@@ -9,9 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboardPage() {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const [sources, attention, published, failuresToday, recentJobs] = await Promise.all([
+  const [sources, readyToPublish, published, failuresToday, recentJobs] = await Promise.all([
     prisma.source.count({ where: { enabled: true } }),
-    prisma.job.count({ where: { status: { in: ["READY", "IMPROVING"] } } }),
+    prisma.job.count({
+      where: {
+        status: "READY",
+        OR: [{ rawJobId: null }, { rawJob: { needsAggregation: false } }],
+      },
+    }),
     prisma.job.count({ where: { status: "PUBLISHED" } }),
     prisma.ingestFailure.count({ where: { createdAt: { gte: startOfToday } } }),
     prisma.job.findMany({
@@ -65,9 +70,9 @@ export default async function AdminDashboardPage() {
         <Link href="/admin/sources" className="focus-ring rounded-lg border border-line bg-surface p-4 hover:border-line-strong">
           <p className="text-[12px] text-ink-muted">Active sources</p><p className="mt-1 text-h2 font-medium">{sources}</p>
         </Link>
-        <Link href="/admin/review" className={`focus-ring rounded-lg border p-4 ${attention > 0 ? "border-danger/30 bg-danger/5" : "border-line bg-surface"}`}>
-          <p className="text-[12px] text-ink-muted">Needs attention</p>
-          <p className="mt-1 text-h2 font-medium">{attention > 0 ? attention : "All clear"}</p>
+        <Link href="/admin/review" className="focus-ring rounded-lg border border-line bg-surface p-4 hover:border-line-strong">
+          <p className="text-[12px] text-ink-muted">Ready to publish</p>
+          <p className="mt-1 text-h2 font-medium">{readyToPublish}</p>
         </Link>
       </section>
 

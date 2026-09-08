@@ -12,11 +12,11 @@ export default async function ReviewQueuePage() {
     <div className="flex flex-col gap-9">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-label uppercase tracking-[0.1em] text-ink-muted">Exceptions only</p>
-          <h1 className="mt-2 text-h2 font-medium">Needs attention</h1>
-          <p className="mt-2 text-body text-ink-muted">Jobs appear here only when they need a quick check before publishing.</p>
+          <p className="text-label uppercase tracking-[0.1em] text-ink-muted">Completed drafts</p>
+          <h1 className="mt-2 text-h2 font-medium">Ready to publish</h1>
+          <p className="mt-2 text-body text-ink-muted">These jobs finished processing and are waiting for a final manual publish.</p>
         </div>
-        {pending.length > 0 && <div className="rounded-pill bg-accent-orchid px-4 py-2 text-meta font-semibold">{pending.length} to review</div>}
+        {pending.length > 0 && <div className="rounded-pill bg-accent-mint px-4 py-2 text-meta font-semibold">{pending.length} ready</div>}
       </div>
 
       <section>
@@ -31,7 +31,7 @@ export default async function ReviewQueuePage() {
             {pending.map((job) => (
               <Link key={job.id} href={`/admin/review/${job.id}`} className="focus-ring group rounded-lg border border-line bg-surface p-5 transition-transform hover:-translate-y-0.5 hover:border-line-strong">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-pill bg-accent-orchid/60 px-2.5 py-1 text-[11px] font-semibold">Needs review</span>
+                  <span className="rounded-pill bg-accent-mint/60 px-2.5 py-1 text-[11px] font-semibold">Ready</span>
                   <span className="text-[11px] text-ink-muted">{new Date(job.updatedAt).toLocaleDateString()}</span>
                 </div>
                 <h2 className="mt-4 text-body font-semibold leading-snug group-hover:underline">{job.title}</h2>

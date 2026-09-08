@@ -32,13 +32,15 @@ export const aiOutputSchema = z.object({
   // actually fill in, which silently zeroed out every inferred field. Plain named numbers avoid
   // both problems: no union, and explicit per-field guidance.
   inferredFieldConfidence: z.object({
-    remoteType: z.number().min(0).max(1).default(0),
-    employmentType: z.number().min(0).max(1).default(0),
-    salaryMin: z.number().min(0).max(1).default(0),
-    salaryPeriod: z.number().min(0).max(1).default(0),
-    postedAt: z.number().min(0).max(1).default(0),
-    closesAt: z.number().min(0).max(1).default(0),
-    skills: z.number().min(0).max(1).default(0),
+    // Do not add Zod defaults here. The AI SDK converts defaulted properties to optional JSON
+    // Schema fields, which OpenAI strict structured output rejects before generation begins.
+    remoteType: z.number().min(0).max(1),
+    employmentType: z.number().min(0).max(1),
+    salaryMin: z.number().min(0).max(1),
+    salaryPeriod: z.number().min(0).max(1),
+    postedAt: z.number().min(0).max(1),
+    closesAt: z.number().min(0).max(1),
+    skills: z.number().min(0).max(1),
   }),
 });
 export type AiOutput = z.infer<typeof aiOutputSchema>;

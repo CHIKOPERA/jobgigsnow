@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toAggregationResult, type AiOutput } from "../aggregate-merge";
+import { zodSchema } from "ai";
+import { aiOutputSchema, toAggregationResult, type AiOutput } from "../aggregate-merge";
 import type { ReconciledFields } from "../types";
 
 const URL = "https://example.com/jobs/8842";
@@ -46,6 +47,21 @@ function aiOutput(overrides: Partial<AiOutput> = {}): AiOutput {
     ...overrides,
   };
 }
+
+test("OpenAI strict schema requires every inferred confidence field", () => {
+  const jsonSchema = zodSchema(aiOutputSchema).jsonSchema as {
+    properties?: { inferredFieldConfidence?: { required?: string[] } };
+  };
+  assert.deepEqual(jsonSchema.properties?.inferredFieldConfidence?.required, [
+    "remoteType",
+    "employmentType",
+    "salaryMin",
+    "salaryPeriod",
+    "postedAt",
+    "closesAt",
+    "skills",
+  ]);
+});
 
 test("keeps the deterministic candidate's source/confidence when the AI agrees", () => {
   const result = toAggregationResult(

@@ -203,7 +203,10 @@ export async function getDashboardStats() {
 
 export async function listReviewJobs() {
   const pending = await prisma.job.findMany({
-    where: { status: { in: ["READY", "IMPROVING"] } },
+    where: {
+      status: "READY",
+      OR: [{ rawJobId: null }, { rawJob: { needsAggregation: false } }],
+    },
     orderBy: { updatedAt: "desc" },
     take: 100,
     select: {
