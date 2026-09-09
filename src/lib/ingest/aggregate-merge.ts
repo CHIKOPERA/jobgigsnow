@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import type { AggregationResult, FieldSource, NormalizedJobFields, ReconciledFields } from "./types";
+import { JOBGIGSNOW_EDITORIAL_GUIDE } from "./editorial-guide";
 
 // Below this self-reported confidence, an AI-only field (no deterministic candidate backing it)
 // is nulled out rather than trusted.
@@ -73,6 +74,9 @@ Instructions:
 - Return description as a concise, publish-ready HTML fragment using only paragraphs, h2/h3,
   bullet or numbered lists, strong, em, and links already present on the page. Keep factual
   requirements, responsibilities, benefits, dates, salaries, and locations faithful to the source.
+- Follow this editorial guide when writing the description. Relevant sections should be useful and
+  complete, but do not pad a short source with unsupported content:
+${JOBGIGSNOW_EDITORIAL_GUIDE}
 - remoteType and employmentType are required on every job record, so make your best good-faith
   reading whenever the content gives any signal, and treat direct keywords as high confidence
   (0.8+), not as something to be cautious about — this is reading stated content, not inventing:

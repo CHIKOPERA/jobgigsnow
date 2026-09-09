@@ -3,17 +3,19 @@ import { notFound } from "next/navigation";
 import { JobReviewEditor } from "@/components/admin/review/JobReviewEditor";
 import { getReviewJob } from "@/lib/ingest/admin-query";
 import { toEditorHtml } from "@/lib/job-rich-text";
+import { getSeoRewritePrompt } from "@/lib/ingest/settings";
 
 export const metadata: Metadata = { title: "Admin — Edit job" };
 export const dynamic = "force-dynamic";
 
 export default async function ReviewJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const job = await getReviewJob(id);
+  const [job, defaultRewritePrompt] = await Promise.all([getReviewJob(id), getSeoRewritePrompt()]);
   if (!job) notFound();
 
   return (
     <JobReviewEditor
+      defaultRewritePrompt={defaultRewritePrompt}
       initial={{
         id: job.id,
         slug: job.slug,

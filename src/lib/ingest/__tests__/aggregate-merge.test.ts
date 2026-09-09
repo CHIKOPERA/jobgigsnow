@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { zodSchema } from "ai";
-import { aiOutputSchema, toAggregationResult, type AiOutput } from "../aggregate-merge";
+import { aiOutputSchema, buildPrompt, toAggregationResult, type AiOutput } from "../aggregate-merge";
 import type { ReconciledFields } from "../types";
 
 const URL = "https://example.com/jobs/8842";
@@ -61,6 +61,19 @@ test("OpenAI strict schema requires every inferred confidence field", () => {
     "closesAt",
     "skills",
   ]);
+});
+
+test("automatic job creation applies the JobGigsNow editorial guide", () => {
+  const prompt = buildPrompt(
+    URL,
+    reconciled({ title: { value: "Forklift Operator", source: "jsonld", confidence: 0.95 } }),
+    "Official vacancy details",
+  );
+
+  assert.match(prompt, /publication-ready JobGigsNow opportunity guide/);
+  assert.match(prompt, /Never invent or estimate salary/);
+  assert.match(prompt, /JobGigsNow verdict/);
+  assert.match(prompt, /do not add a visible SEO-keyword dump/);
 });
 
 test("keeps the deterministic candidate's source/confidence when the AI agrees", () => {

@@ -1,5 +1,9 @@
 import { ingest } from "@/config/ingest";
-import { runTick } from "@/lib/ingest/tick";
+import { start } from "workflow/api";
+import { dailySiteManagerWorkflow } from "@/lib/agent/daily-manager";
+import { attachWorkflowRun, createAgentRun } from "@/lib/agent/agent-runs";
+import { getAgentSettings } from "@/lib/ingest/settings";
+import { prisma } from "@/lib/prisma";
 import { errorResponse } from "@/lib/validation/common";
 
 // Bounds one invocation's runtime (Section G) — requires Pro or higher plan (Hobby caps at 10s).
@@ -14,6 +18,21 @@ export async function GET(request: Request) {
     return errorResponse("UNAUTHORIZED", "Missing or invalid cron secret.", 401);
   }
 
-  const result = await runTick();
-  return Response.json({ ok: true, ...result });
+  const settings = await getAgentSettings();
+  if (!settings.agentEnabled) return Response.json({ ok: true, skipped: true, reason: "Daily manager paused." });
+
+  const { run, created } = await createAgentRun("daily");
+  if (!created) return Response.json({ ok: true, queued: false, runId: run.id, status: run.status });
+
+  try {
+    const workflow = await start(dailySiteManagerWorkflow, [run.id]);
+    await attachWorkflowRun(run.id, workflow.runId);
+    return Response.json({ ok: true, queued: true, runId: run.id, workflowRunId: workflow.runId });
+  } catch (error) {
+    await prisma.dailyAgentRun.update({
+      where: { id: run.id },
+      data: { status: "FAILED", currentStage: "FAILED", error: error instanceof Error ? error.message : String(error), finishedAt: new Date() },
+    });
+    throw error;
+  }
 }

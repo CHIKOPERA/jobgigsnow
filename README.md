@@ -2,10 +2,10 @@
 
 A job board with a simple publishing flow: **sources → fetch → rewrite → first Pexels image → publish**.
 
-Add sources in the admin and use **Fetch jobs** to import that source immediately. Enabled
-sources are also checked on their schedule by the cron worker. Each job URL is captured,
-rewritten, paired with the first Pexels image when one can be saved, and published. Image
-search/storage failures do not block publication.
+Add sources in the admin and use **Fetch jobs** to import that source immediately. The daily
+manager checks enabled sources in learned priority order. Each job URL is captured, rewritten,
+paired with the first Pexels image when one can be saved, and published. Image search/storage
+failures do not block publication.
 
 The normal importer is one path used by the admin button, single-job import, and cron. One failed
 job is recorded and skipped while the rest of the source continues. Manual editing remains
@@ -13,6 +13,14 @@ available for published jobs and unfinished drafts.
 
 The admin focuses on Sources, Drafts, and Content. HTML sources have a simple careers URL and
 job-link selector form; provider-specific settings remain available in advanced setup.
+
+## Daily learning manager
+
+One durable Vercel Workflow runs each morning to measure traffic/search performance, maintain
+category coverage, learn which sources produce reliable results, publish within the configured
+daily range, and report every decision in **Admin → Daily manager**. It uses the same ingestion
+pipeline rather than adding a second worker system. See [`docs/daily-manager.md`](docs/daily-manager.md)
+for migration, Google API and environment-variable setup.
 
 ## Page capture with Jina
 

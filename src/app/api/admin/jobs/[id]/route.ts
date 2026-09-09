@@ -24,7 +24,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
     const body = jobReviewPatchSchema.parse(await request.json());
     const existing = await prisma.job.findUnique({
       where: { id },
-      select: { id: true, postedAt: true },
+      select: { id: true, postedAt: true, publishedAt: true },
     });
     if (!existing) return errorResponse("NOT_FOUND", "Job not found.", 404);
 
@@ -59,6 +59,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
         rewritePrompt: body.rewritePrompt,
         status: body.status,
         postedAt: body.status === "PUBLISHED" && !existing.postedAt ? new Date() : undefined,
+        publishedAt: body.status === "PUBLISHED" && !existing.publishedAt ? new Date() : undefined,
       },
       select: { id: true, slug: true, status: true, updatedAt: true },
     });

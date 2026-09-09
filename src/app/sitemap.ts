@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 import { site } from "@/config";
 import { prisma } from "@/lib/prisma";
+import { opportunityCategories } from "@/config/categories";
+import { getAgentSettings } from "@/lib/ingest/settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = site.url.replace(/\/$/, "");
-  const [jobs, articles, courses] = await Promise.all([
+  const [jobs, articles, courses, categoryRows, settings] = await Promise.all([
     prisma.job.findMany({
       where: { status: "PUBLISHED" },
       select: { slug: true, updatedAt: true },
@@ -25,6 +27,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       orderBy: { updatedAt: "desc" },
       take: 2_500,
     }),
+    prisma.job.groupBy({ by: ["category"], where: { status: "PUBLISHED" }, _count: { _all: true } }),
+    getAgentSettings(),
   ]);
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -38,6 +42,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (jobs.length > 0) {
     staticPages.unshift({ url: `${baseUrl}/jobs`, changeFrequency: "daily", priority: 1 });
+    for (const row of categoryRows) {
+      if (row._count._all < settings.categoryMinimum) continue;
+      staticPages.push({
+        url: `${baseUrl}/jobs?category=${row.category}`,
+        changeFrequency: "daily",
+        priority: opportunityCategories[row.category] ? 0.85 : 0.7,
+      });
+    }
   }
   if (articles.length > 0) {
     staticPages.push({ url: `${baseUrl}/articles`, changeFrequency: "weekly", priority: 0.8 });

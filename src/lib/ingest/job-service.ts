@@ -81,7 +81,7 @@ export async function upsertJob(input: JobUpsertInput) {
         create: tagIds.map((tagId) => ({ tagId })),
       },
     },
-    select: { id: true, slug: true, status: true },
+    select: { id: true, slug: true, status: true, publishedAt: true },
   });
 }
 

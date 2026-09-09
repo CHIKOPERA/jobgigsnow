@@ -258,7 +258,7 @@ export async function getOperationsDashboard() {
     prisma.source.count({ where: { enabled: true } }),
     prisma.source.count({ where: { enabled: false } }),
     prisma.job.count({ where: { status: "READY", OR: [{ rawJobId: null }, { rawJob: { needsAggregation: false } }] } }),
-    prisma.job.count({ where: { status: "PUBLISHED", postedAt: { gte: startOfDay } } }),
+    prisma.job.count({ where: { status: "PUBLISHED", publishedAt: { gte: startOfDay } } }),
     prisma.ingestRun.aggregate({ where: { startedAt: { gte: startOfDay } }, _sum: { newCount: true } }),
     listActiveRunsWithProgress(),
     prisma.ingestFailure.findMany({

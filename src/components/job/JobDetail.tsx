@@ -8,8 +8,9 @@ import {
   initials,
   remoteLabel,
 } from "@/lib/format";
-import { Button, LinkButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { SaveButton } from "./SaveButton";
+import { ApplyLink } from "./ApplyLink";
 import { descriptionContainsHtml, sanitizeJobDescription } from "@/lib/job-rich-text";
 
 interface JobDetailProps {
@@ -128,9 +129,7 @@ export function JobDetail({ job, saved, image }: JobDetailProps) {
             Applications closed
           </Button>
         ) : job.applyUrl ? (
-          <LinkButton href={job.applyUrl} target="_blank" rel="noopener noreferrer">
-            Apply now
-          </LinkButton>
+          <ApplyLink href={job.applyUrl} jobId={job.id} title={job.title} category={job.category} />
         ) : null}
       </div>
     </article>

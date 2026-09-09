@@ -6,9 +6,6 @@ import { useRouter } from "next/navigation";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
-const DEFAULT_PROMPT =
-  "Rewrite this job description in clear, welcoming South African English. Keep every factual requirement and remove repetition. Use short sections and useful bullet points. Do not invent salary, benefits, dates, or requirements.";
-
 const CATEGORIES = [
   ["JOB", "Job"],
   ["INTERNSHIP", "Internship"],
@@ -78,7 +75,7 @@ function ToolbarButton({
   );
 }
 
-export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
+export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: ReviewJob; defaultRewritePrompt: string }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial.title);
   const [companyName, setCompanyName] = useState(initial.companyName);
@@ -88,7 +85,7 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
   const [employmentType, setEmploymentType] = useState(initial.employmentType);
   const [highlights, setHighlights] = useState(initial.highlights.join("\n"));
   const [applyUrl, setApplyUrl] = useState(initial.applyUrl);
-  const [prompt, setPrompt] = useState(initial.rewritePrompt || DEFAULT_PROMPT);
+  const [prompt, setPrompt] = useState(initial.rewritePrompt || defaultRewritePrompt);
   const [status, setStatus] = useState(initial.status);
   const [busy, setBusy] = useState<"save" | "rewrite" | "publish" | "reject" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -314,7 +311,7 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            rows={9}
+            rows={14}
             className="focus-ring mt-3 w-full rounded-md border border-white/15 bg-white/8 p-3 text-meta leading-relaxed text-surface placeholder:text-surface/40"
           />
           <button
@@ -325,7 +322,7 @@ export function JobReviewEditor({ initial }: { initial: ReviewJob }) {
           >
             {busy === "rewrite" ? "Rewriting…" : "Rewrite with AI"}
           </button>
-          <p className="mt-3 text-[12px] leading-relaxed text-surface/55">The instruction is saved with this job. AI output is never published automatically.</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-surface/55">The JobGigsNow guide adds useful applicant context while protecting official facts. The result remains a draft until you publish it.</p>
         </section>
 
         {initial.rawUrl && (

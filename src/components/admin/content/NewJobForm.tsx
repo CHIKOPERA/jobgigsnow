@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { JOB_CREATION_CHECKLIST } from "@/lib/ingest/editorial-guide";
 
 const CATEGORIES = [
   ["JOB", "Job"],
@@ -86,9 +87,16 @@ export function NewJobForm() {
           Apply URL
           <input name="applyUrl" type="url" placeholder="https://…" className={fieldClass} />
         </label>
+        <details className="rounded-lg border border-line bg-surface-sunk p-4 sm:col-span-2">
+          <summary className="focus-ring cursor-pointer rounded-sm text-meta font-semibold">JobGigsNow writing guide</summary>
+          <p className="mt-3 text-meta text-ink-muted">Paste the official vacancy information first. On the review screen, the AI rewrite uses this guide:</p>
+          <ul className="mt-3 grid gap-2 text-meta text-ink-muted sm:grid-cols-2">
+            {JOB_CREATION_CHECKLIST.map((item) => <li key={item} className="flex items-start gap-2"><span aria-hidden="true" className="text-ink">✓</span><span>{item}</span></li>)}
+          </ul>
+        </details>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
-          Description
-          <textarea name="description" required rows={14} className="focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-3 text-meta normal-case tracking-normal" />
+          Official vacancy information
+          <textarea name="description" required rows={14} placeholder="Paste the official description, requirements, responsibilities, deadline and application instructions. The writing guide can structure it on the review screen." className="focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-3 text-meta normal-case tracking-normal" />
         </label>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
           Highlights · one per line
@@ -98,7 +106,7 @@ export function NewJobForm() {
       {error && <p className="mt-4 rounded-md bg-danger/10 p-3 text-meta text-danger">{error}</p>}
       <div className="mt-6 flex justify-end">
         <button type="submit" disabled={busy} className="focus-ring h-11 rounded-pill bg-ink px-6 text-meta font-semibold text-surface disabled:opacity-50">
-          {busy ? "Creating…" : "Create and review"}
+          {busy ? "Creating…" : "Create draft and open editor"}
         </button>
       </div>
     </form>

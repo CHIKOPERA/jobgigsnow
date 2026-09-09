@@ -41,6 +41,14 @@ const envSchema = z.object({
   JINA_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   JINA_API_KEY: z.string().trim().optional().transform((value) => value || undefined),
 
+  // Optional measurement integrations for the daily learning agent. The publishing pipeline
+  // remains available while these are disconnected; the admin explains which data is missing.
+  GOOGLE_SERVICE_ACCOUNT_EMAIL: z.email().optional(),
+  GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: z.string().min(1).optional(),
+  GOOGLE_ANALYTICS_PROPERTY_ID: z.string().regex(/^\d+$/).optional(),
+  GOOGLE_SEARCH_CONSOLE_SITE_URL: z.string().min(1).optional(),
+  GOOGLE_PAGESPEED_API_KEY: z.string().min(1).optional(),
+
   FEATURE_NATIVE_APPLY: boolFromString,
   FEATURE_ALERTS: boolFromString,
 }).refine(

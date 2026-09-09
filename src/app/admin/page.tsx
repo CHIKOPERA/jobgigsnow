@@ -6,6 +6,7 @@ import { RunControls } from "@/components/admin/RunControls";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
 import { RunTickButton } from "@/components/admin/RunTickButton";
 import { getOperationsDashboard } from "@/lib/ingest/admin-query";
+import { getAgentDashboard } from "@/lib/agent/dashboard";
 
 export const metadata: Metadata = { title: "Admin — Dashboard" };
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ function runOutcome(run: { newCount: number; failedCount: number; validationFail
 }
 
 export default async function AdminDashboardPage() {
-  const dashboard = await getOperationsDashboard();
+  const [dashboard, agent] = await Promise.all([getOperationsDashboard(), getAgentDashboard()]);
   const { metrics, activeRuns, issueGroups, sources } = dashboard;
 
   return (
@@ -29,6 +30,11 @@ export default async function AdminDashboardPage() {
         <div><p className="text-label uppercase tracking-[0.1em] text-ink-muted">Publishing overview</p><h1 className="mt-2 text-title font-semibold">Dashboard</h1><p className="mt-2 text-body text-ink-muted">See what is running, what needs action and what went live today.</p></div>
         <div className="flex gap-2"><Link href="/admin/sources/new" className="focus-ring inline-flex h-10 items-center rounded-pill border border-line-strong px-4 text-meta font-semibold">Add source</Link><Link href="/admin/crawl" className="focus-ring inline-flex h-10 items-center rounded-pill bg-ink px-4 text-meta font-semibold text-surface">Import one job</Link></div>
       </header>
+
+      <Link href="/admin/goals" className="focus-ring rounded-xl bg-ink p-5 text-surface hover:bg-[#2b2d24] md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><p className="text-label uppercase tracking-[0.1em] text-surface/55">Daily manager</p><span className={`size-2 rounded-full ${agent.settings.agentEnabled ? "bg-accent-mint" : "bg-surface/35"}`} /></div><h2 className="mt-2 text-h2 font-medium">{agent.sevenDayAverage === null ? "Connect traffic data" : `${agent.sevenDayAverage} average daily views`} · {agent.publishedToday} published today</h2><p className="mt-2 text-meta text-surface/65">{agent.insights[0]?.title ?? "Run the manager to measure, learn and set source priorities."}</p></div><span className="text-meta font-semibold">Open goals →</span></div>
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-[12px] text-surface/60"><span>Views goal {agent.settings.dailyViewGoal}</span><span>Publish {agent.settings.dailyPublishMin}–{agent.settings.dailyPublishMax}</span><span>{agent.categories.filter((item) => item.count < item.goal).length} categories below coverage</span><span>Last run {agent.latestRun?.status.toLowerCase() ?? "never"}</span></div>
+      </Link>
 
       <section aria-label="Today’s outcomes" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-line bg-surface p-4"><p className="text-[12px] text-ink-muted">Found today</p><p className="mt-1 text-h2 font-medium">{metrics.foundToday}</p></div>

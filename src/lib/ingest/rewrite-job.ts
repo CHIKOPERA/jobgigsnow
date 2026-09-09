@@ -6,6 +6,7 @@ import { ai } from "@/config/ai";
 import { prisma } from "@/lib/prisma";
 import { sanitizeJobDescription } from "@/lib/job-rich-text";
 import { getAiModel } from "./ai-model";
+import { JOBGIGSNOW_EDITORIAL_GUIDE } from "./editorial-guide";
 
 const rewriteOutputSchema = z.object({
   descriptionHtml: z.string().min(1),
@@ -18,16 +19,23 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
       id: true,
       rawJobId: true,
       title: true,
+      category: true,
       location: true,
       employmentType: true,
       remoteType: true,
+      salaryMin: true,
+      salaryMax: true,
+      salaryCurrency: true,
+      salaryPeriod: true,
+      postedAt: true,
+      closesAt: true,
+      applyUrl: true,
       company: { select: { name: true } },
     },
   });
   if (!job) return { ok: false as const, reason: "not_found" as const };
-  if (!job.rawJobId) return { ok: false as const, reason: "missing_raw_job" as const };
 
-  const run = await prisma.improvementRun.create({
+  const run = job.rawJobId ? await prisma.improvementRun.create({
     data: {
       rawJobId: job.rawJobId,
       jobId: job.id,
@@ -37,20 +45,31 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
       startedAt: new Date(),
     },
     select: { id: true },
-  });
+  }) : null;
   await prisma.job.update({ where: { id: job.id }, data: { status: "IMPROVING", rewritePrompt: instruction } });
 
   try {
+    const editorialInstruction = instruction.includes("NON-NEGOTIABLE FACT RULES")
+      ? instruction
+      : `${JOBGIGSNOW_EDITORIAL_GUIDE}\n\nADDITIONAL ADMIN INSTRUCTION\n${instruction}`;
+    const salary = job.salaryMin === null
+      ? "Not specified"
+      : `${job.salaryCurrency ?? ""} ${job.salaryMin}${job.salaryMax === null ? "" : `–${job.salaryMax}`} ${job.salaryPeriod ?? ""}`.trim();
     const { output, usage } = await generateText({
       model: getAiModel(),
       system:
-        "You are a careful job-post editor. Rewrite for clarity and readability without inventing requirements, benefits, salary, dates, or company facts. Return a clean HTML fragment only through the requested schema. Use only paragraphs, h2/h3, bullet or numbered lists, strong, em, blockquote, and links already present in the input.",
+        "You are a careful JobGigsNow opportunity editor. Preserve the official title and factual meaning. Never invent requirements, benefits, salary, dates, eligibility, documents, hiring stages, or company facts. Return a clean HTML description fragment only through the requested schema, using paragraphs, h2/h3, bullet or numbered lists, strong, em, blockquote, and links supplied in the input.",
       prompt: [
-        `Admin instruction: ${instruction}`,
+        editorialInstruction,
         `Job: ${job.title} at ${job.company.name}`,
+        `Opportunity type: ${job.category}`,
         `Location: ${job.location}`,
         `Work arrangement: ${job.remoteType}`,
         `Employment type: ${job.employmentType}`,
+        `Salary: ${salary}`,
+        `Posted date: ${job.postedAt?.toISOString() ?? "Not specified"}`,
+        `Deadline: ${job.closesAt?.toISOString() ?? "Not specified"}`,
+        `Official application URL: ${job.applyUrl ?? "Not provided"}`,
         "Current description:",
         currentDescription,
       ].join("\n\n"),
@@ -60,12 +79,12 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
     const description = sanitizeJobDescription(output.descriptionHtml);
     if (!description) throw new Error("The rewrite returned an empty description.");
 
-    await prisma.$transaction([
-      prisma.job.update({
+    const jobUpdate = prisma.job.update({
         where: { id: job.id },
         data: { description, rewritePrompt: instruction, status: "READY" },
-      }),
-      prisma.improvementRun.update({
+      });
+    if (run) {
+      await prisma.$transaction([jobUpdate, prisma.improvementRun.update({
         where: { id: run.id },
         data: {
           status: "SUCCEEDED",
@@ -74,22 +93,26 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
           diff: { kind: "admin_rewrite", instruction, before: currentDescription, after: description } as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
-      }),
-    ]);
+      })]);
+    } else {
+      await jobUpdate;
+    }
 
     return { ok: true as const, description };
   } catch (error) {
-    await prisma.$transaction([
-      prisma.job.update({ where: { id: job.id }, data: { status: "READY" } }),
-      prisma.improvementRun.update({
+    const jobUpdate = prisma.job.update({ where: { id: job.id }, data: { status: "READY" } });
+    if (run) {
+      await prisma.$transaction([jobUpdate, prisma.improvementRun.update({
         where: { id: run.id },
         data: {
           status: "FAILED",
           diff: { kind: "admin_rewrite", instruction, error: error instanceof Error ? error.message : String(error) } as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
-      }),
-    ]);
+      })]);
+    } else {
+      await jobUpdate;
+    }
     throw error;
   }
 }

@@ -26,6 +26,9 @@ model Source {
   lastRunAt      DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  /// Learned priority used by the daily manager. Higher-scoring sources are checked first.
+  agentPriority  Float     @default(0)
+  agentReason    String?
 
   rawJobs    RawJob[]
   ingestRuns IngestRun[]
@@ -304,7 +307,11 @@ model Job {
   isNative       Boolean        @default(false)
   status         JobStatus      @default(DISCOVERED)
   postedAt       DateTime?
+  /// When JobGigsNow first published the page. `postedAt` remains the source's official date.
+  publishedAt    DateTime?
   closesAt       DateTime?
+  indexingNotifiedAt DateTime?
+  indexingRemovedAt  DateTime?
   rawJobId       String?        @unique
   rawJob         RawJob?        @relation(fields: [rawJobId], references: [id])
   createdAt      DateTime       @default(now())
@@ -317,6 +324,7 @@ model Job {
   // The list query's primary access pattern: published jobs newest first.
   @@index([status, postedAt])
   @@index([status, category, postedAt])
+  @@index([publishedAt])
   @@index([companyId])
   @@index([location])
   // Upgraded to a pg_trgm GIN index on title/description in the initial migration
@@ -401,7 +409,115 @@ model AdminSetting {
   /// Supports {{title}}/{{company}}/{{location}}/{{remoteType}}/{{employmentType}}/{{description}}/{{tags}}/{{applyUrl}}
   /// placeholders. Falls back to DEFAULT_SEO_REWRITE_PROMPT (src/lib/ingest/settings.ts) if no row exists.
   seoRewritePrompt String
+  agentEnabled      Boolean @default(true)
+  dailyViewGoal     Int     @default(300)
+  dailyPublishMin   Int     @default(5)
+  dailyPublishMax   Int     @default(10)
+  categoryMinimum   Int     @default(5)
   updatedAt        DateTime @updatedAt
+}
+
+enum AgentRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model DailyAgentRun {
+  id            String         @id @default(cuid())
+  runKey        String         @unique
+  dateKey       String
+  workflowRunId String?
+  status        AgentRunStatus @default(RUNNING)
+  currentStage  String?
+  summary       Json?
+  error         String?
+  startedAt     DateTime       @default(now())
+  finishedAt    DateTime?
+  updatedAt     DateTime       @updatedAt
+
+  @@index([dateKey, startedAt])
+  @@index([status])
+}
+
+model DailySiteMetric {
+  dateKey          String   @id
+  measuredDate     String?
+  pageViews        Int?
+  activeUsers      Int?
+  engagedSessions  Int?
+  searchClicks     Float?
+  searchImpressions Float?
+  searchCtr        Float?
+  searchPosition   Float?
+  applyClicks      Int?
+  savedJobs        Int      @default(0)
+  publishedJobs    Int      @default(0)
+  categoryCounts   Json
+  topPages         Json?
+  sourceScores     Json?
+  speed            Json?
+  integrations     Json
+  collectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+enum AgentInsightKind {
+  TRAFFIC
+  CATEGORY
+  SOURCE
+  CONTENT
+  SPEED
+  SYSTEM
+}
+
+enum AgentInsightStatus {
+  ACTIVE
+  RESOLVED
+  DISMISSED
+}
+
+model AgentInsight {
+  id          String             @id @default(cuid())
+  fingerprint String             @unique
+  kind        AgentInsightKind
+  status      AgentInsightStatus @default(ACTIVE)
+  title       String
+  detail      String
+  action      String?
+  evidence    Json?
+  confidence  Float              @default(0)
+  firstSeenAt DateTime           @default(now())
+  lastSeenAt  DateTime           @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status, lastSeenAt])
+  @@index([kind, lastSeenAt])
+}
+
+enum AgentExperimentStatus {
+  PROPOSED
+  RUNNING
+  KEPT
+  REVERTED
+  CANCELLED
+}
+
+model AgentExperiment {
+  id          String                @id @default(cuid())
+  hypothesis  String
+  metric      String
+  change      String
+  status      AgentExperimentStatus @default(PROPOSED)
+  baseline    Json?
+  result      Json?
+  decision    String?
+  startedAt   DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([status, createdAt])
 }
 
 // ---------------------------------------------------------------------------

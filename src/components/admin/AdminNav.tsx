@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const DESTINATIONS = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/goals", label: "Daily manager" },
   { href: "/admin/content", label: "Jobs" },
   { href: "/admin/sources", label: "Sources" },
   { href: "/admin/activity", label: "Activity" },
@@ -29,6 +30,8 @@ export function AdminNav({ readyCount, issueCount }: { readyCount: number; issue
           {DESTINATIONS.map((item) => {
             const isActive = item.href === "/admin"
               ? pathname === "/admin"
+              : item.href === "/admin/goals"
+                ? pathname.startsWith("/admin/goals")
               : item.href === "/admin/content"
                 ? pathname.startsWith("/admin/content") || pathname.startsWith("/admin/review")
                 : item.href === "/admin/activity"

@@ -34,7 +34,7 @@ export function SettingsForm({ initialPrompt }: { initialPrompt: string }) {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error?.message ?? "The setting could not be saved.");
-      setNotice("Saved — every job aggregated from now on uses this prompt.");
+      setNotice("Saved — this is now the default guide for future job rewrites.");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The setting could not be saved.");

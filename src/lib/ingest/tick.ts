@@ -51,12 +51,12 @@ async function findDueSourceIds(): Promise<string[]> {
   const now = Date.now();
   const enabledSources = await prisma.source.findMany({
     where: { enabled: true },
-    select: { id: true, cadenceMinutes: true, lastRunAt: true },
+    select: { id: true, cadenceMinutes: true, lastRunAt: true, agentPriority: true },
   });
 
   const due = enabledSources
     .filter((s) => !s.lastRunAt || now - s.lastRunAt.getTime() >= s.cadenceMinutes * 60_000)
-    .sort((a, b) => (a.lastRunAt?.getTime() ?? 0) - (b.lastRunAt?.getTime() ?? 0))
+    .sort((a, b) => b.agentPriority - a.agentPriority || (a.lastRunAt?.getTime() ?? 0) - (b.lastRunAt?.getTime() ?? 0))
     .slice(0, ingest.discoveryPerTick);
 
   return due.map((source) => source.id);
@@ -265,6 +265,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
             data: {
               ...(image ?? {}),
               status: "PUBLISHED",
+              publishedAt: job.publishedAt ?? new Date(),
               postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
             },
           });
@@ -379,7 +380,12 @@ export interface SimpleImportResult {
   elapsedMs: number;
 }
 
-async function processRunJobs(runId: string, startedAt: number, report?: ImportProgressReporter): Promise<SimpleImportResult> {
+async function processRunJobs(
+  runId: string,
+  startedAt: number,
+  report?: ImportProgressReporter,
+  maxPublications = Number.POSITIVE_INFINITY,
+): Promise<SimpleImportResult> {
   const run = await prisma.ingestRun.findUnique({
     where: { id: runId },
     select: { status: true, discoveredCount: true, failedCount: true, source: { select: { name: true } } },
@@ -444,6 +450,7 @@ async function processRunJobs(runId: string, startedAt: number, report?: ImportP
 
   for (const [index, row] of rows.entries()) {
     if (!timeBudget(startedAt)) break;
+    if (result.published >= maxPublications) break;
     const currentRun = await prisma.ingestRun.findUnique({ where: { id: runId }, select: { status: true } });
     if (currentRun?.status !== "RUNNING") break;
     const current = index + 1;
@@ -475,7 +482,12 @@ async function processRunJobs(runId: string, startedAt: number, report?: ImportP
 }
 
 /** One clear source import: discover URLs, process each URL, publish every valid job. */
-export async function importSource(sourceId: string, startedAt = Date.now(), report?: ImportProgressReporter): Promise<SimpleImportResult> {
+export async function importSource(
+  sourceId: string,
+  startedAt = Date.now(),
+  report?: ImportProgressReporter,
+  maxPublications = Number.POSITIVE_INFINITY,
+): Promise<SimpleImportResult> {
   const source = await prisma.source.findUnique({ where: { id: sourceId }, select: { name: true, enabled: true } });
   const activeRun = await prisma.ingestRun.findFirst({
     where: { sourceId, status: { in: ["RUNNING", "PAUSED"] } },
@@ -483,7 +495,7 @@ export async function importSource(sourceId: string, startedAt = Date.now(), rep
     select: { id: true, status: true, discoveredCount: true },
   });
   if (activeRun) {
-    if (activeRun.status === "RUNNING") return processRunJobs(activeRun.id, startedAt, report);
+    if (activeRun.status === "RUNNING") return processRunJobs(activeRun.id, startedAt, report, maxPublications);
     return {
       ingestRunId: activeRun.id,
       found: activeRun.discoveredCount,
@@ -501,7 +513,7 @@ export async function importSource(sourceId: string, startedAt = Date.now(), rep
   if (!runId) {
     return { ingestRunId: null, found: 0, processed: 0, published: 0, skipped: 0, failed: 0, elapsedMs: Date.now() - startedAt };
   }
-  return processRunJobs(runId, startedAt, report);
+  return processRunJobs(runId, startedAt, report, maxPublications);
 }
 
 /** Compatibility wrapper for old callers that already have a run id. */
@@ -517,19 +529,27 @@ export interface TickResult {
   elapsedMs: number;
 }
 
+export interface TickOptions {
+  /** Bounds automatic output for a goal-managed run. Manual single-job imports are unaffected. */
+  maxPublications?: number;
+}
+
 /**
  * One bounded slice of ingestion work, safe to call as often as Vercel Cron is configured to call
  * it (Section G). Every piece of state this touches is durable (RawJob/IngestRun columns) — a
  * killed invocation just leaves rows for the next tick's claim queries to pick back up.
  */
-export async function runTick(report?: ImportProgressReporter): Promise<TickResult> {
+export async function runTick(report?: ImportProgressReporter, options: TickOptions = {}): Promise<TickResult> {
   const startedAt = Date.now();
   const sourceRuns: SimpleImportResult[] = [];
+  const maximum = options.maxPublications ?? Number.POSITIVE_INFINITY;
   const runningRunIds = timeBudget(startedAt) ? await findRunningRunIds() : [];
 
   for (const runId of runningRunIds) {
     if (!timeBudget(startedAt)) break;
-    sourceRuns.push(await processRunJobs(runId, startedAt, report));
+    const published = sourceRuns.reduce((sum, run) => sum + run.published, 0);
+    if (published >= maximum) break;
+    sourceRuns.push(await processRunJobs(runId, startedAt, report, maximum - published));
   }
 
   const dueSourceIds = timeBudget(startedAt) ? await findDueSourceIds() : [];
@@ -537,6 +557,8 @@ export async function runTick(report?: ImportProgressReporter): Promise<TickResu
 
   for (const sourceId of dueSourceIds) {
     if (!timeBudget(startedAt)) break;
+    const published = sourceRuns.reduce((sum, run) => sum + run.published, 0);
+    if (published >= maximum) break;
     const alreadyActive = await prisma.ingestRun.findFirst({
       where: { sourceId, status: { in: ["RUNNING", "PAUSED"] } },
       select: { id: true, status: true },
@@ -544,11 +566,12 @@ export async function runTick(report?: ImportProgressReporter): Promise<TickResu
     if (alreadyActive) {
       if (alreadyActive.status === "RUNNING" && !activeRunIds.has(alreadyActive.id)) {
         activeRunIds.add(alreadyActive.id);
-        sourceRuns.push(await processRunJobs(alreadyActive.id, startedAt, report));
+        sourceRuns.push(await processRunJobs(alreadyActive.id, startedAt, report, maximum - published));
       }
       continue;
     }
-    sourceRuns.push(await importSource(sourceId, startedAt, report));
+    const run = await importSource(sourceId, startedAt, report, maximum - published);
+    sourceRuns.push(run);
   }
 
   return {

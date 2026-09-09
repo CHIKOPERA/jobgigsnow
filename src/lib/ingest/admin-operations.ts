@@ -24,7 +24,7 @@ const allowedJobStatuses: Record<BulkJobAction, JobStatus[]> = {
 export async function updateJobsInBulk(ids: string[], action: BulkJobAction) {
   const jobs = await prisma.job.findMany({
     where: { id: { in: ids }, status: { in: allowedJobStatuses[action] } },
-    select: { id: true, postedAt: true, status: true },
+    select: { id: true, postedAt: true, publishedAt: true, status: true },
   });
   const targetStatus = jobStatusForAction[action];
 
@@ -33,7 +33,10 @@ export async function updateJobsInBulk(ids: string[], action: BulkJobAction) {
       where: { id: job.id },
       data: {
         status: targetStatus,
-        ...(targetStatus === "PUBLISHED" && { postedAt: job.postedAt ?? new Date() }),
+        ...(targetStatus === "PUBLISHED" && {
+          postedAt: job.postedAt ?? new Date(),
+          publishedAt: job.publishedAt ?? new Date(),
+        }),
       },
       select: { id: true },
     })),

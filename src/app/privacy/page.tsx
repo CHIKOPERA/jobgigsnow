@@ -40,7 +40,7 @@ export default function PrivacyPage() {
 
       <h2>Your choices</h2>
       <p>
-        You can avoid optional account features, remove saved items, adjust browser cookie controls and use Google’s advertising settings where available. You may ask to access, correct or delete personal information associated with your account, subject to applicable law and necessary verification.
+        You can avoid optional account features, remove saved items and adjust browser cookie controls. Third-party vendors, including Google, may use cookies to serve ads based on visits to this and other websites. Google’s use of advertising cookies enables it and its partners to serve personalised ads; you can manage or opt out of personalised advertising in <a href="https://adssettings.google.com/" target="_blank" rel="noopener noreferrer">Google Ads Settings</a>. You may ask to access, correct or delete personal information associated with your account, subject to applicable law and necessary verification.
       </p>
 
       <h2>Contact</h2>

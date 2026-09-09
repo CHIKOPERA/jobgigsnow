@@ -51,7 +51,7 @@ export async function seoRewrite(ctx: SeoRewriteContext): Promise<SeoRewriteOutc
   if (!description) throw new Error("The SEO rewrite returned an empty description.");
 
   return {
-    title: output.title.trim() || ctx.title,
+    title: ctx.title,
     description,
     tags: output.tags.length > 0 ? output.tags : ctx.tags,
     promptTemplate: template,
