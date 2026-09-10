@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { opportunityCategories } from "@/config/categories";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 import type { JobCardDto } from "@/lib/validation/job";
 import {
   accentTileClass,
@@ -74,6 +75,12 @@ export function JobCard({ job, href, saved, active = false }: JobCardProps) {
 
         {chips.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="rounded-pill border border-line-strong px-2.5 py-[5px] text-[12px] text-ink-muted">
+              {jobIndustries[job.industry]}
+            </span>
+            <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
+              {provinces[job.province]}
+            </span>
             {job.category !== "JOB" && !isClosed && (
               <span className="rounded-pill border border-line-strong px-2.5 py-[5px] text-[12px] text-ink-muted">
                 {opportunityCategories[job.category].label}

@@ -5,6 +5,7 @@ import { buildJobWhere } from "@/lib/job-filters";
 import { prisma } from "@/lib/prisma";
 import type { FilterFacetsDto } from "@/lib/validation/filters";
 import type { JobListQuery } from "@/lib/validation/job";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 
 export { buildJobWhere };
 
@@ -33,13 +34,16 @@ export async function fetchJobPage(query: JobListQuery) {
 }
 
 export async function getFilterFacets(): Promise<FilterFacetsDto> {
-  const [locationGroups, remoteGroups, employmentGroups, tagGroups] = await Promise.all([
+  const [industryGroups, provinceGroups, remoteGroups, employmentGroups, tagGroups] = await Promise.all([
     prisma.job.groupBy({
-      by: ["location"],
+      by: ["industry"],
       where: { status: "PUBLISHED" },
       _count: { _all: true },
-      orderBy: { _count: { location: "desc" } },
-      take: 20,
+    }),
+    prisma.job.groupBy({
+      by: ["province"],
+      where: { status: "PUBLISHED" },
+      _count: { _all: true },
     }),
     prisma.job.groupBy({
       by: ["remoteType"],
@@ -67,11 +71,16 @@ export async function getFilterFacets(): Promise<FilterFacetsDto> {
   const tagNameById = new Map(tagRows.map((t) => [t.id, t.name]));
 
   return {
-    locations: locationGroups.map((g) => ({
-      value: g.location,
-      label: g.location,
+    industries: industryGroups.map((g) => ({
+      value: g.industry,
+      label: jobIndustries[g.industry],
       count: g._count._all,
-    })),
+    })).sort((a, b) => a.label.localeCompare(b.label)),
+    provinces: provinceGroups.map((g) => ({
+      value: g.province,
+      label: provinces[g.province],
+      count: g._count._all,
+    })).sort((a, b) => a.label.localeCompare(b.label)),
     remoteTypes: remoteGroups.map((g) => ({
       value: g.remoteType,
       label: titleCase(g.remoteType),

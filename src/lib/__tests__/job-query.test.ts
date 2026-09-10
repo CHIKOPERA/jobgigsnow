@@ -14,10 +14,10 @@ test("always scopes to PUBLISHED jobs", () => {
 
 test("q filters title/description case-insensitively", () => {
   const where = buildJobWhere(query({ q: "engineer" }));
-  assert.deepEqual(where.OR, [
+  assert.deepEqual(where.AND, [{ OR: [
     { title: { contains: "engineer", mode: "insensitive" } },
     { description: { contains: "engineer", mode: "insensitive" } },
-  ]);
+  ] }]);
 });
 
 test("location filters with a case-insensitive contains match", () => {
@@ -28,6 +28,12 @@ test("location filters with a case-insensitive contains match", () => {
 test("category filters on an exact OpportunityCategory match", () => {
   const where = buildJobWhere(query({ category: "INTERNSHIP" }));
   assert.equal(where.category, "INTERNSHIP");
+});
+
+test("industry and province use exact normalized classifications", () => {
+  const where = buildJobWhere(query({ industry: "TECHNOLOGY", province: "GAUTENG" }));
+  assert.equal(where.industry, "TECHNOLOGY");
+  assert.equal(where.province, "GAUTENG");
 });
 
 test("no category filter when unset", () => {
@@ -45,11 +51,16 @@ test("employmentType filters on an exact match", () => {
   assert.equal(where.employmentType, "FULL_TIME");
 });
 
-test("salaryMin matches jobs whose range clears the floor, including open-ended max", () => {
+test("salaryMin compares a monthly Rand target across advertised pay periods", () => {
   const where = buildJobWhere(query({ salaryMin: 100_000 }));
-  assert.deepEqual(where.OR, [
-    { salaryMax: { gte: 100_000 } },
-    { salaryMax: null, salaryMin: { gte: 100_000 } },
+  const salary = (where.AND as Array<Record<string, unknown>>)[0];
+  assert.equal(salary.salaryCurrency, "ZAR");
+  assert.deepEqual(salary.OR, [
+    { salaryPeriod: "HOURLY", OR: [{ salaryMax: { gte: 579 } }, { salaryMax: null, salaryMin: { gte: 579 } }] },
+    { salaryPeriod: "DAILY", OR: [{ salaryMax: { gte: 4615 } }, { salaryMax: null, salaryMin: { gte: 4615 } }] },
+    { salaryPeriod: "WEEKLY", OR: [{ salaryMax: { gte: 23095 } }, { salaryMax: null, salaryMin: { gte: 23095 } }] },
+    { salaryPeriod: "MONTHLY", OR: [{ salaryMax: { gte: 100_000 } }, { salaryMax: null, salaryMin: { gte: 100_000 } }] },
+    { salaryPeriod: "YEARLY", OR: [{ salaryMax: { gte: 1_200_000 } }, { salaryMax: null, salaryMin: { gte: 1_200_000 } }] },
   ]);
 });
 

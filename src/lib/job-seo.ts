@@ -1,5 +1,6 @@
 import sanitizeHtml from "sanitize-html";
 import { employmentLabel, formatSalary, remoteLabel } from "./format";
+import { provinces, type ProvinceValue } from "@/config/job-taxonomy";
 
 export interface JobSeoInput {
   id: string;
@@ -9,6 +10,7 @@ export interface JobSeoInput {
   companyName: string;
   companyDomain: string | null;
   location: string;
+  province?: ProvinceValue;
   remoteType: "ONSITE" | "HYBRID" | "REMOTE";
   employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "TEMPORARY";
   salaryMin: number | null;
@@ -138,6 +140,7 @@ export function buildJobPostingSchema(job: JobSeoInput, siteUrl: string) {
         address: {
           "@type": "PostalAddress",
           addressLocality: job.location,
+          ...(job.province ? { addressRegion: provinces[job.province], addressCountry: "ZA" } : {}),
         },
       },
     } : {}),

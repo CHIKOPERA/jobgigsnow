@@ -4,6 +4,7 @@
  * "never invent missing information" guard actually lives.
  */
 import { z } from "zod";
+import { jobIndustryValues, provinceValues } from "@/config/job-taxonomy";
 import type { AggregationResult, FieldSource, NormalizedJobFields, ReconciledFields } from "./types";
 import { JOBGIGSNOW_EDITORIAL_GUIDE } from "./editorial-guide";
 
@@ -15,6 +16,8 @@ export const aiOutputSchema = z.object({
   title: z.string().nullable(),
   company: z.string().nullable(),
   location: z.string().nullable(),
+  industry: z.enum(jobIndustryValues),
+  province: z.enum(provinceValues),
   description: z.string().nullable(),
   applyUrl: z.string().nullable(),
   remoteType: z.enum(["ONSITE", "HYBRID", "REMOTE"]).nullable(),
@@ -84,9 +87,19 @@ ${JOBGIGSNOW_EDITORIAL_GUIDE}
   HYBRID; "full-time" -> FULL_TIME; "part-time" -> PART_TIME; "contract"/"contractor" -> CONTRACT;
   "internship"/"intern" -> INTERNSHIP; "temporary"/"temp" -> TEMPORARY. Only return null for
   either field if the content truly gives no such signal at all.
+- Classify every opportunity into exactly one industry. Use TECHNOLOGY for IT/software/data roles,
+  HEALTHCARE, FINANCE, ENGINEERING, EDUCATION, GOVERNMENT, RETAIL, CONSTRUCTION_PROPERTY,
+  MANUFACTURING, TRANSPORT_LOGISTICS, HOSPITALITY_TOURISM, AGRICULTURE, MEDIA_MARKETING, LEGAL,
+  ENERGY_MINING, SECURITY, or OTHER when none fits clearly.
+- Classify the location into one South African province: EASTERN_CAPE, FREE_STATE, GAUTENG,
+  KWAZULU_NATAL, LIMPOPO, MPUMALANGA, NORTH_WEST, NORTHERN_CAPE, WESTERN_CAPE, or NATIONWIDE
+  for remote, national, multiple-province, or unspecified South African opportunities.
 - Derive salaryMin/salaryMax/salaryCurrency/salaryPeriod, postedAt, closesAt, and skills from the
   page content the same way — if a field is not actually stated or clearly implied, return null
   for it rather than inventing a value with no basis in the content.
+- Salary amounts are published in South African Rand. Only return salary amounts when the source
+  states R, rand, or ZAR; set salaryCurrency to ZAR. If it states another currency, leave all
+  salary fields null rather than converting or relabelling the amount.
 - Fill in every field of inferredFieldConfidence with your confidence (0 to 1) that the
   corresponding value above is correct and actually supported by the content — 0 means you found
   no support at all for that field (which is exactly what leaving remoteType/employmentType/etc.
@@ -133,6 +146,8 @@ export function toAggregationResult(externalUrl: string, reconciled: ReconciledF
     title: null,
     company: null,
     location: null,
+    industry: ai.industry,
+    province: ai.province,
     description: null,
     applyUrl: null,
     remoteType: null,
@@ -147,6 +162,11 @@ export function toAggregationResult(externalUrl: string, reconciled: ReconciledF
   };
   const fieldConfidence: AggregationResult["fieldConfidence"] = {};
   const fieldSource: AggregationResult["fieldSource"] = {};
+
+  fieldConfidence.industry = 0.75;
+  fieldConfidence.province = 0.75;
+  fieldSource.industry = "ai_inference";
+  fieldSource.province = "ai_inference";
 
   for (const key of ["title", "company", "location", "description", "applyUrl"] as const) {
     const picked = pickBaseField(reconciled[key], ai[key]);

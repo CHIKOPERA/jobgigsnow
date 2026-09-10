@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:backfill": "tsx scripts/backfill-job-data.ts",
     "db:studio": "prisma studio",
     "sources:upsert": "tsx scripts/upsert-career-sources.ts",
     "typecheck": "tsc --noEmit",

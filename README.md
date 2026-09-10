@@ -2,10 +2,17 @@
 
 A job board with a simple publishing flow: **sources → fetch → rewrite → first Pexels image → publish**.
 
+Every opportunity is classified by opportunity type, industry, and South African province. Public
+search supports industry, province, work arrangement, employment type, tags, and a comparable
+monthly-Rand salary slider while preserving the source's advertised pay period.
+
 Add sources in the admin and use **Fetch jobs** to import that source immediately. The daily
 manager checks enabled sources in learned priority order. Each job URL is captured, rewritten,
 paired with the first Pexels image when one can be saved, and published. Image search/storage
 failures do not block publication.
+
+Source priority is category-aware: the manager remembers which industries, opportunity types and
+provinces each source has supplied, then raises sources that match current coverage gaps.
 
 The normal importer is one path used by the admin button, single-job import, and cron. One failed
 job is recorded and skipped while the rest of the source continues. Manual editing remains

@@ -13,12 +13,13 @@ interface QuickFilter {
 const QUICK_FILTERS: QuickFilter[] = [
   { label: "Remote", param: "remote", value: "REMOTE" },
   { label: "Full-time", param: "employmentType", value: "FULL_TIME" },
-  { label: "$100k+", param: "salaryMin", value: "100000" },
+  { label: "R30k+/month", param: "salaryMin", value: "30000" },
 ];
 
 interface FilterChipsProps {
   facets: {
-    locations: { value: string; label: string; count: number }[];
+    industries: { value: string; label: string; count: number }[];
+    provinces: { value: string; label: string; count: number }[];
     employmentTypes: { value: string; label: string; count: number }[];
     remoteTypes: { value: string; label: string; count: number }[];
     tags: { value: string; label: string; count: number }[];
@@ -41,7 +42,15 @@ export function FilterChips({ facets }: FilterChipsProps) {
     router.push(`/jobs?${next.toString()}`);
   }
 
-  const activeExtraCount = ["location", "tags", "postedWithin"].filter((p) =>
+  function choose(param: string, value: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value) next.set(param, value);
+    else next.delete(param);
+    next.delete("cursor");
+    router.push(`/jobs?${next.toString()}`);
+  }
+
+  const activeExtraCount = ["industry", "province", "salaryMin", "tags", "postedWithin"].filter((p) =>
     searchParams.has(p),
   ).length;
 
@@ -52,6 +61,24 @@ export function FilterChips({ facets }: FilterChipsProps) {
         role="group"
         aria-label="Quick filters"
       >
+        <select
+          aria-label="Filter by industry"
+          value={searchParams.get("industry") ?? ""}
+          onChange={(event) => choose("industry", event.target.value)}
+          className="focus-ring h-10 flex-none rounded-pill border border-line-strong bg-surface px-3 text-meta text-ink"
+        >
+          <option value="">All industries</option>
+          {facets.industries.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <select
+          aria-label="Filter by province"
+          value={searchParams.get("province") ?? ""}
+          onChange={(event) => choose("province", event.target.value)}
+          className="focus-ring h-10 flex-none rounded-pill border border-line-strong bg-surface px-3 text-meta text-ink"
+        >
+          <option value="">All provinces</option>
+          {facets.provinces.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
         {QUICK_FILTERS.map((filter) => {
           const isActive = searchParams.get(filter.param) === filter.value;
           return (

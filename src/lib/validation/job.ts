@@ -2,8 +2,10 @@ import { z } from "zod";
 import { pagination } from "@/config/pagination";
 import {
   employmentTypeSchema,
+  jobIndustrySchema,
   jobStatusSchema,
   opportunityCategorySchema,
+  provinceSchema,
   remoteTypeSchema,
   salaryPeriodSchema,
 } from "./common";
@@ -11,6 +13,8 @@ import {
 export const jobListQuerySchema = z.object({
   q: z.string().trim().min(1).max(200).optional(),
   category: opportunityCategorySchema.optional(),
+  industry: jobIndustrySchema.optional(),
+  province: provinceSchema.optional(),
   location: z.string().trim().min(1).max(200).optional(),
   remote: remoteTypeSchema.optional(),
   employmentType: employmentTypeSchema.optional(),
@@ -33,6 +37,8 @@ export const jobCardSchema = z.object({
   companyName: z.string(),
   companySlug: z.string(),
   category: opportunityCategorySchema,
+  industry: jobIndustrySchema,
+  province: provinceSchema,
   location: z.string(),
   remoteType: remoteTypeSchema,
   employmentType: employmentTypeSchema,

@@ -5,6 +5,8 @@
  * reads/writes them a fixed shape to agree on.
  */
 
+import type { JobIndustryValue, ProvinceValue } from "@/config/job-taxonomy";
+
 export type FieldSource = "jsonld" | "selectors" | "general_html" | "readability" | "ai_inference";
 
 export interface FieldCandidate<T = string> {
@@ -77,6 +79,8 @@ export interface NormalizedJobFields {
   title: string | null;
   company: string | null;
   location: string | null;
+  industry: JobIndustryValue;
+  province: ProvinceValue;
   remoteType: "ONSITE" | "HYBRID" | "REMOTE" | null;
   employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "TEMPORARY" | null;
   salaryMin: number | null;

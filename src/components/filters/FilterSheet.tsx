@@ -4,10 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { filters } from "@/config/filters";
+import { salaryFilter } from "@/config/job-taxonomy";
 
 interface FilterSheetProps {
   facets: {
-    locations: { value: string; label: string; count: number }[];
+    industries: { value: string; label: string; count: number }[];
+    provinces: { value: string; label: string; count: number }[];
     tags: { value: string; label: string; count: number }[];
   };
   onClose: () => void;
@@ -18,7 +20,9 @@ export function FilterSheet({ facets, onClose }: FilterSheetProps) {
   const searchParams = useSearchParams();
   const titleId = useId();
 
-  const [location, setLocation] = useState(searchParams.get("location") ?? "");
+  const [industry, setIndustry] = useState(searchParams.get("industry") ?? "");
+  const [province, setProvince] = useState(searchParams.get("province") ?? "");
+  const [salaryMin, setSalaryMin] = useState(Number(searchParams.get("salaryMin") ?? 0));
   const [postedWithin, setPostedWithin] = useState(searchParams.get("postedWithin") ?? "");
   const [selectedTags, setSelectedTags] = useState<string[]>(
     searchParams.get("tags")?.split(",").filter(Boolean) ?? [],
@@ -30,8 +34,12 @@ export function FilterSheet({ facets, onClose }: FilterSheetProps) {
 
   function apply() {
     const next = new URLSearchParams(searchParams.toString());
-    if (location) next.set("location", location);
-    else next.delete("location");
+    if (industry) next.set("industry", industry);
+    else next.delete("industry");
+    if (province) next.set("province", province);
+    else next.delete("province");
+    if (salaryMin > 0) next.set("salaryMin", String(salaryMin));
+    else next.delete("salaryMin");
     if (postedWithin) next.set("postedWithin", postedWithin);
     else next.delete("postedWithin");
     if (selectedTags.length > 0) next.set("tags", selectedTags.join(","));
@@ -42,7 +50,9 @@ export function FilterSheet({ facets, onClose }: FilterSheetProps) {
   }
 
   function clear() {
-    setLocation("");
+    setIndustry("");
+    setProvince("");
+    setSalaryMin(0);
     setPostedWithin("");
     setSelectedTags([]);
   }
@@ -72,25 +82,41 @@ export function FilterSheet({ facets, onClose }: FilterSheetProps) {
         </div>
 
         <div className="mt-6 flex flex-col gap-6">
-          <div>
-            <label htmlFor="location-input" className="mb-1.5 block text-label font-medium">
-              Location
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-label font-medium">
+              Industry
+              <select value={industry} onChange={(event) => setIndustry(event.target.value)} className="focus-ring mt-1.5 h-12 w-full rounded-md border border-line-strong bg-surface px-3.5 text-body">
+                <option value="">All industries</option>
+                {facets.industries.map((item) => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}
+              </select>
             </label>
+            <label className="text-label font-medium">
+              Province
+              <select value={province} onChange={(event) => setProvince(event.target.value)} className="focus-ring mt-1.5 h-12 w-full rounded-md border border-line-strong bg-surface px-3.5 text-body">
+                <option value="">All provinces</option>
+                {facets.provinces.map((item) => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-4">
+              <label htmlFor="salary-range" className="text-label font-medium">Minimum monthly salary</label>
+              <output htmlFor="salary-range" className="text-meta font-semibold">
+                {salaryMin === 0 ? "Any salary" : `R${salaryMin.toLocaleString("en-ZA")}+`}
+              </output>
+            </div>
             <input
-              id="location-input"
-              type="text"
-              list="location-options"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="City, state or Remote"
-              className="focus-ring h-12 w-full rounded-sm border border-line-strong bg-surface px-3.5 text-body"
-              style={{ borderRadius: "8px" }}
+              id="salary-range"
+              type="range"
+              min={salaryFilter.minMonthly}
+              max={salaryFilter.maxMonthly}
+              step={salaryFilter.step}
+              value={salaryMin}
+              onChange={(event) => setSalaryMin(Number(event.target.value))}
+              className="mt-3 w-full accent-[#25271f]"
             />
-            <datalist id="location-options">
-              {facets.locations.map((loc) => (
-                <option key={loc.value} value={loc.value} />
-              ))}
-            </datalist>
+            <div className="mt-1 flex justify-between text-[11px] text-ink-muted"><span>Any</span><span>R150,000+ monthly equivalent</span></div>
           </div>
 
           <fieldset>

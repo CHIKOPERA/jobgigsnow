@@ -7,6 +7,8 @@ export type SaveJobBody = z.infer<typeof saveJobBodySchema>;
 
 export const savedSearchQuerySchema = z.object({
   q: z.string().optional(),
+  industry: z.string().optional(),
+  province: z.string().optional(),
   location: z.string().optional(),
   remote: z.string().optional(),
   employmentType: z.string().optional(),

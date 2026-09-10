@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { employmentTypeSchema, opportunityCategorySchema, remoteTypeSchema } from "./common";
+import { employmentTypeSchema, jobIndustrySchema, opportunityCategorySchema, provinceSchema, remoteTypeSchema, salaryPeriodSchema } from "./common";
 
 const nullableUrl = z.union([z.url(), z.literal("")]).transform((value) => value || null);
 
@@ -8,9 +8,14 @@ export const jobReviewPatchSchema = z
     title: z.string().trim().min(2).max(200).optional(),
     companyName: z.string().trim().min(1).max(160).optional(),
     category: opportunityCategorySchema.optional(),
+    industry: jobIndustrySchema.optional(),
     location: z.string().trim().min(1).max(240).optional(),
+    province: provinceSchema.optional(),
     remoteType: remoteTypeSchema.optional(),
     employmentType: employmentTypeSchema.optional(),
+    salaryMin: z.number().int().nonnegative().nullable().optional(),
+    salaryMax: z.number().int().nonnegative().nullable().optional(),
+    salaryPeriod: salaryPeriodSchema.nullable().optional(),
     description: z.string().min(1).max(200_000).optional(),
     highlights: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     applyUrl: nullableUrl.optional(),
@@ -28,9 +33,14 @@ export const manualJobCreateSchema = z.object({
   title: z.string().trim().min(2).max(200),
   companyName: z.string().trim().min(1).max(160),
   category: opportunityCategorySchema,
+  industry: jobIndustrySchema,
   location: z.string().trim().min(1).max(240),
+  province: provinceSchema,
   remoteType: remoteTypeSchema,
   employmentType: employmentTypeSchema,
+  salaryMin: z.number().int().nonnegative().nullable().default(null),
+  salaryMax: z.number().int().nonnegative().nullable().default(null),
+  salaryPeriod: salaryPeriodSchema.nullable().default(null),
   description: z.string().trim().min(1).max(200_000),
   highlights: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
   applyUrl: nullableUrl,

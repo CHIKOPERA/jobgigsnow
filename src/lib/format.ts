@@ -49,9 +49,10 @@ export function formatSalary(
   period: string | null,
 ): string | null {
   if (min === null && max === null) return null;
-  const symbol = currency === "USD" || !currency ? "$" : `${currency} `;
-  const suffix = period === "HOURLY" ? "/hr" : period === "YEARLY" ? "/yr" : "";
-  const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
+  const symbol = currency === "ZAR" || !currency ? "R" : `${currency} `;
+  const suffixes: Record<string, string> = { HOURLY: "/hour", DAILY: "/day", WEEKLY: "/week", MONTHLY: "/month", YEARLY: "/year" };
+  const suffix = period ? suffixes[period] ?? "" : "";
+  const fmt = (n: number) => n.toLocaleString("en-ZA", { maximumFractionDigits: 0 });
 
   if (min !== null && max !== null && min !== max) {
     return `${symbol}${fmt(min)}–${fmt(max)}${suffix}`;

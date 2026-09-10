@@ -4,16 +4,19 @@
  */
 import type { AggregationResult } from "./types";
 import { toEditorHtml } from "@/lib/job-rich-text";
+import type { JobIndustryValue, ProvinceValue } from "@/config/job-taxonomy";
 
 export interface NormalizedFields {
   title: string;
   companyName: string;
   location: string;
+  industry: JobIndustryValue;
+  province: ProvinceValue;
   remoteType: "ONSITE" | "HYBRID" | "REMOTE";
   employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "TEMPORARY";
   salaryMin: number | null;
   salaryMax: number | null;
-  salaryCurrency: string | null;
+  salaryCurrency: "ZAR" | null;
   salaryPeriod: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | null;
   description: string;
   tags: string[];
@@ -55,11 +58,13 @@ export function buildNormalizedFields(aggregation: AggregationResult, externalUr
       title: normalized.title!,
       companyName: normalized.company!,
       location: normalized.location!,
+      industry: normalized.industry,
+      province: normalized.province,
       remoteType: normalized.remoteType!,
       employmentType: normalized.employmentType!,
       salaryMin: normalized.salaryMin,
       salaryMax: normalized.salaryMin !== null ? normalized.salaryMax : null,
-      salaryCurrency: normalized.salaryMin !== null ? normalized.salaryCurrency : null,
+      salaryCurrency: normalized.salaryMin !== null ? "ZAR" : null,
       salaryPeriod: normalized.salaryPeriod,
       description: toEditorHtml(normalized.description!),
       tags: normalized.skills,

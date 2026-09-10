@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { JOB_CREATION_CHECKLIST } from "@/lib/ingest/editorial-guide";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 
 const CATEGORIES = [
   ["JOB", "Job"],
@@ -25,6 +26,7 @@ export function NewJobForm() {
     setBusy(true);
     setError(null);
     const form = new FormData(event.currentTarget);
+    const numberOrNull = (value: FormDataEntryValue | null) => value === null || value === "" ? null : Number(value);
     try {
       const response = await fetch("/api/admin/jobs", {
         method: "POST",
@@ -33,9 +35,14 @@ export function NewJobForm() {
           title: form.get("title"),
           companyName: form.get("companyName"),
           category: form.get("category"),
+          industry: form.get("industry"),
           location: form.get("location"),
+          province: form.get("province"),
           remoteType: form.get("remoteType"),
           employmentType: form.get("employmentType"),
+          salaryMin: numberOrNull(form.get("salaryMin")),
+          salaryMax: numberOrNull(form.get("salaryMax")),
+          salaryPeriod: form.get("salaryPeriod") || null,
           applyUrl: form.get("applyUrl"),
           description: form.get("description"),
           highlights: String(form.get("highlights") ?? "").split("\n").map((item) => item.trim()).filter(Boolean),
@@ -66,9 +73,21 @@ export function NewJobForm() {
           <input name="location" required maxLength={240} placeholder="Johannesburg, Gauteng" className={fieldClass} />
         </label>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
-          Category
+          Opportunity type
           <select name="category" defaultValue="JOB" className={fieldClass}>
             {CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Industry
+          <select name="industry" defaultValue="OTHER" className={fieldClass}>
+            {Object.entries(jobIndustries).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Province
+          <select name="province" defaultValue="NATIONWIDE" className={fieldClass}>
+            {Object.entries(provinces).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
@@ -81,6 +100,20 @@ export function NewJobForm() {
           Employment type
           <select name="employmentType" defaultValue="FULL_TIME" className={fieldClass}>
             <option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="CONTRACT">Contract</option><option value="INTERNSHIP">Internship</option><option value="TEMPORARY">Temporary</option>
+          </select>
+        </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Salary from · Rand
+          <input name="salaryMin" type="number" min="0" step="1" placeholder="25000" className={fieldClass} />
+        </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Salary to · Rand
+          <input name="salaryMax" type="number" min="0" step="1" placeholder="35000" className={fieldClass} />
+        </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Salary period
+          <select name="salaryPeriod" defaultValue="MONTHLY" className={fieldClass}>
+            <option value="HOURLY">Hourly</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option>
           </select>
         </label>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">

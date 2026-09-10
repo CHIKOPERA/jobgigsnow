@@ -5,7 +5,14 @@ export interface SourceLearningInput {
   discovered: number;
   failures: number;
   published: number;
-  dominantCategory: string | null;
+  coverageMatches: string[];
+  specialties: Array<{
+    dimension: "industry" | "opportunityType" | "province";
+    value: string;
+    label: string;
+    count: number;
+    published: number;
+  }>;
 }
 
 export interface LearnedSourceScore extends SourceLearningInput {
@@ -25,23 +32,21 @@ export interface LearningInsight {
 
 export function scoreSources(
   sources: SourceLearningInput[],
-  categoryCounts: Record<string, number>,
-  categoryMinimum: number,
 ): LearnedSourceScore[] {
   return sources.map((source) => {
     const attempts = Math.max(1, source.discovered + source.failures);
     const reliability = Math.max(0, 1 - source.failures / attempts);
     const yieldRate = Math.min(1, source.published / Math.max(1, source.discovered));
-    const needsCategory = source.dominantCategory !== null
-      && (categoryCounts[source.dominantCategory] ?? 0) < categoryMinimum;
     const exploration = source.runs < 3 ? 10 : 0;
-    const categoryBonus = needsCategory ? 20 : 0;
+    const categoryBonus = Math.min(24, source.coverageMatches.length * 8);
     const score = Math.round((reliability * 55 + yieldRate * 15 + categoryBonus + exploration) * 10) / 10;
     const parts = [
       `${Math.round(reliability * 100)}% recent reliability`,
       `${source.published} published from ${source.discovered} discoveries`,
     ];
-    if (needsCategory) parts.push(`${source.dominantCategory} is below its coverage goal`);
+    if (source.coverageMatches.length > 0) {
+      parts.push(`can supply gaps in ${source.coverageMatches.slice(0, 2).join(" and ")}`);
+    }
     if (exploration > 0) parts.push("new source exploration");
     return { ...source, score, reason: parts.join(" · ") };
   }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
@@ -51,6 +56,7 @@ export function buildLearningInsights(input: {
   pageViews: number | null;
   dailyViewGoal: number;
   categoryCounts: Record<string, number>;
+  industryCounts: Record<string, number>;
   categoryMinimum: number;
   sources: LearnedSourceScore[];
   speed: Record<string, number> | null;
@@ -83,6 +89,19 @@ export function buildLearningInsights(input: {
       action: "Prioritise reliable sources that have previously produced this category. Never fill the gap with unsupported content.",
       confidence: 1,
       evidence: { category, active: count, goal: input.categoryMinimum },
+    });
+  }
+
+  for (const [industry, count] of Object.entries(input.industryCounts)) {
+    if (industry === "OTHER" || count >= input.categoryMinimum) continue;
+    insights.push({
+      fingerprint: `industry:${industry}:coverage`,
+      kind: "CATEGORY",
+      title: `${industry.replaceAll("_", " ")} industry needs coverage`,
+      detail: `${count} active opportunities are available; the goal is ${input.categoryMinimum}.`,
+      action: "Check reliable sources whose history shows that they supply this industry.",
+      confidence: 1,
+      evidence: { industry, active: count, goal: input.categoryMinimum },
     });
   }
 

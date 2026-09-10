@@ -36,6 +36,9 @@ The private key accepts normal multiline content or escaped `\n` sequences. Neve
 ## What changes automatically
 
 - Reliable sources and sources serving under-covered categories receive a higher priority.
+- Each source gets a learned profile showing the industries, opportunity types and provinces it
+  has actually supplied. Coverage gaps are matched to those profiles before the next crawl order
+  is calculated.
 - New sources receive a small exploration allowance until enough evidence exists.
 - Sources with repeated failures and weak publishing yield move down the queue.
 - The manager creates explainable insights for traffic, category, source, content and speed issues.
@@ -43,5 +46,5 @@ The private key accepts normal multiline content or escaped `\n` sequences. Neve
   experiment. It is not automatically edited; official titles and vacancy facts stay protected.
 
 Use **Admin → Daily manager** to inspect the exact evidence, current source order, active category
-gaps, workflow state and proposed experiments. Manual single-job imports remain available and are
+and industry gaps, learned source specialties, workflow state and proposed experiments. Manual single-job imports remain available and are
 not blocked by the daily automatic publication maximum.

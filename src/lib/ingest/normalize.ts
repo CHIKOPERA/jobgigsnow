@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import type { JobUpsertInput } from "@/lib/validation/ingest";
 import { buildNormalizedFields } from "./normalize-fields";
+import { classifyOpportunity } from "./opportunity-category";
 import { aggregatedJobStatus } from "./review-policy";
 import type { AggregationResult } from "./types";
 
@@ -42,7 +43,7 @@ export async function normalize(
     input: {
       slug,
       rawJobId,
-      category: "JOB",
+      category: classifyOpportunity(aggregation.normalized),
       highlights: [],
       ...built.fields,
       isNative: false,

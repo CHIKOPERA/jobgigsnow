@@ -29,18 +29,6 @@ export function Header() {
           >
             Jobs
           </Link>
-          <Link
-            href="/articles"
-            className="focus-ring rounded-pill px-3 py-2 text-meta font-medium text-ink-muted hover:bg-accent-mint hover:text-ink"
-          >
-            Career guides
-          </Link>
-          <Link
-            href="/courses"
-            className="focus-ring rounded-pill px-3 py-2 text-meta font-medium text-ink-muted hover:bg-accent-mint hover:text-ink"
-          >
-            Courses
-          </Link>
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-3">

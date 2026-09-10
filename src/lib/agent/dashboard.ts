@@ -1,6 +1,7 @@
 import "server-only";
-import type { OpportunityCategory } from "@/generated/prisma/client";
+import type { JobIndustry, OpportunityCategory } from "@/generated/prisma/client";
 import { opportunityCategories } from "@/config/categories";
+import { jobIndustries } from "@/config/job-taxonomy";
 import { prisma } from "@/lib/prisma";
 import { getAgentSettings } from "@/lib/ingest/settings";
 import { johannesburgDateKey, johannesburgDayBounds } from "./time";
@@ -8,7 +9,7 @@ import { johannesburgDateKey, johannesburgDayBounds } from "./time";
 export async function getAgentDashboard() {
   const now = new Date();
   const { start, end } = johannesburgDayBounds(now);
-  const [settings, latestMetric, recentMetrics, latestRun, insights, experiments, categoryRows, publishedToday, sources] = await Promise.all([
+  const [settings, latestMetric, recentMetrics, latestRun, insights, experiments, categoryRows, industryRows, publishedToday, sources] = await Promise.all([
     getAgentSettings(),
     prisma.dailySiteMetric.findFirst({ orderBy: { dateKey: "desc" } }),
     prisma.dailySiteMetric.findMany({
@@ -25,12 +26,17 @@ export async function getAgentDashboard() {
       where: { status: "PUBLISHED", OR: [{ closesAt: null }, { closesAt: { gte: now } }] },
       _count: { _all: true },
     }),
+    prisma.job.groupBy({
+      by: ["industry"],
+      where: { status: "PUBLISHED", OR: [{ closesAt: null }, { closesAt: { gte: now } }] },
+      _count: { _all: true },
+    }),
     prisma.job.count({ where: { publishedAt: { gte: start, lt: end } } }),
     prisma.source.findMany({
       where: { enabled: true },
       orderBy: [{ agentPriority: "desc" }, { name: "asc" }],
       take: 8,
-      select: { id: true, name: true, agentPriority: true, agentReason: true },
+      select: { id: true, name: true, agentPriority: true, agentReason: true, agentProfile: true },
     }),
   ]);
   const counts = new Map(categoryRows.map((row) => [row.category, row._count._all]));
@@ -40,6 +46,15 @@ export async function getAgentDashboard() {
     count: counts.get(category) ?? 0,
     goal: settings.categoryMinimum,
   }));
+  const industryCountMap = new Map(industryRows.map((row) => [row.industry, row._count._all]));
+  const industries = (Object.keys(jobIndustries) as JobIndustry[])
+    .filter((industry) => industry !== "OTHER")
+    .map((industry) => ({
+      industry,
+      label: jobIndustries[industry],
+      count: industryCountMap.get(industry) ?? 0,
+      goal: settings.categoryMinimum,
+    }));
   const measuredViews = recentMetrics.flatMap((metric) => metric.pageViews === null ? [] : [metric.pageViews]);
   const sevenDayAverage = measuredViews.length > 0
     ? Math.round(measuredViews.reduce((sum, value) => sum + value, 0) / measuredViews.length)
@@ -52,6 +67,7 @@ export async function getAgentDashboard() {
     insights,
     experiments,
     categories,
+    industries,
     publishedToday,
     sevenDayAverage,
     sources,

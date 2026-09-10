@@ -7,7 +7,8 @@ const facetSchema = z.object({
 });
 
 export const filterFacetsSchema = z.object({
-  locations: z.array(facetSchema),
+  industries: z.array(facetSchema),
+  provinces: z.array(facetSchema),
   remoteTypes: z.array(facetSchema),
   employmentTypes: z.array(facetSchema),
   tags: z.array(facetSchema),

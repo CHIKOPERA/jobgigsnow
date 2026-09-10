@@ -29,6 +29,8 @@ model Source {
   /// Learned priority used by the daily manager. Higher-scoring sources are checked first.
   agentPriority  Float     @default(0)
   agentReason    String?
+  /// Learned distribution of opportunity types, industries and provinces this source supplies.
+  agentProfile   Json?
 
   rawJobs    RawJob[]
   ingestRuns IngestRun[]
@@ -264,6 +266,39 @@ enum OpportunityCategory {
   FUNDING
 }
 
+enum JobIndustry {
+  TECHNOLOGY
+  HEALTHCARE
+  FINANCE
+  ENGINEERING
+  EDUCATION
+  GOVERNMENT
+  RETAIL
+  CONSTRUCTION_PROPERTY
+  MANUFACTURING
+  TRANSPORT_LOGISTICS
+  HOSPITALITY_TOURISM
+  AGRICULTURE
+  MEDIA_MARKETING
+  LEGAL
+  ENERGY_MINING
+  SECURITY
+  OTHER
+}
+
+enum SouthAfricanProvince {
+  EASTERN_CAPE
+  FREE_STATE
+  GAUTENG
+  KWAZULU_NATAL
+  LIMPOPO
+  MPUMALANGA
+  NORTH_WEST
+  NORTHERN_CAPE
+  WESTERN_CAPE
+  NATIONWIDE
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -285,12 +320,14 @@ model Job {
   companyId      String
   company        Company        @relation(fields: [companyId], references: [id])
   category       OpportunityCategory @default(JOB)
+  industry       JobIndustry @default(OTHER)
   location       String
+  province       SouthAfricanProvince @default(NATIONWIDE)
   remoteType     RemoteType
   employmentType EmploymentType
   salaryMin      Int?
   salaryMax      Int?
-  salaryCurrency String?        @default("USD")
+  salaryCurrency String?        @default("ZAR")
   salaryPeriod   SalaryPeriod?
   /// Rewritten, brand-voice, post-ready description (phase 2 output).
   description    String
@@ -324,6 +361,8 @@ model Job {
   // The list query's primary access pattern: published jobs newest first.
   @@index([status, postedAt])
   @@index([status, category, postedAt])
+  @@index([status, industry, postedAt])
+  @@index([status, province, postedAt])
   @@index([publishedAt])
   @@index([companyId])
   @@index([location])
@@ -454,6 +493,8 @@ model DailySiteMetric {
   savedJobs        Int      @default(0)
   publishedJobs    Int      @default(0)
   categoryCounts   Json
+  industryCounts   Json @default("{}")
+  provinceCounts   Json @default("{}")
   topPages         Json?
   sourceScores     Json?
   speed            Json?
@@ -540,7 +581,7 @@ model SavedSearch {
   id        String   @id @default(cuid())
   userId    String
   name      String
-  /// Serialized filter state: { q, location, remote, employmentType, salaryMin, tags, company, postedWithin }
+  /// Serialized filter state: { q, industry, province, remote, employmentType, salaryMin, tags, company, postedWithin }
   query     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

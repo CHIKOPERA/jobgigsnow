@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 
 const CATEGORIES = [
   ["JOB", "Job"],
@@ -23,9 +24,14 @@ interface ReviewJob {
   companyName: string;
   status: string;
   category: string;
+  industry: string;
   location: string;
+  province: string;
   remoteType: string;
   employmentType: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryPeriod: string | null;
   descriptionHtml: string;
   highlights: string[];
   applyUrl: string;
@@ -80,9 +86,14 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
   const [title, setTitle] = useState(initial.title);
   const [companyName, setCompanyName] = useState(initial.companyName);
   const [category, setCategory] = useState(initial.category);
+  const [industry, setIndustry] = useState(initial.industry);
   const [location, setLocation] = useState(initial.location);
+  const [province, setProvince] = useState(initial.province);
   const [remoteType, setRemoteType] = useState(initial.remoteType);
   const [employmentType, setEmploymentType] = useState(initial.employmentType);
+  const [salaryMin, setSalaryMin] = useState<number | null>(initial.salaryMin);
+  const [salaryMax, setSalaryMax] = useState<number | null>(initial.salaryMax);
+  const [salaryPeriod, setSalaryPeriod] = useState(initial.salaryPeriod ?? "MONTHLY");
   const [highlights, setHighlights] = useState(initial.highlights.join("\n"));
   const [applyUrl, setApplyUrl] = useState(initial.applyUrl);
   const [prompt, setPrompt] = useState(initial.rewritePrompt || defaultRewritePrompt);
@@ -119,9 +130,14 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
       title,
       companyName,
       category,
+      industry,
       location,
+      province,
       remoteType,
       employmentType,
+      salaryMin,
+      salaryMax,
+      salaryPeriod: salaryMin === null ? null : salaryPeriod,
       description: editor?.getHTML() ?? initial.descriptionHtml,
       highlights: highlights.split("\n").map((item) => item.trim()).filter(Boolean),
       applyUrl,
@@ -258,9 +274,21 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
             <input value={location} onChange={(event) => setLocation(event.target.value)} className={fieldClass} />
           </label>
           <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
-            Category
+            Opportunity type
             <select value={category} onChange={(event) => setCategory(event.target.value)} className={fieldClass}>
               {CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Industry
+            <select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass}>
+              {Object.entries(jobIndustries).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Province
+            <select value={province} onChange={(event) => setProvince(event.target.value)} className={fieldClass}>
+              {Object.entries(provinces).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
@@ -273,6 +301,20 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
             Employment type
             <select value={employmentType} onChange={(event) => setEmploymentType(event.target.value)} className={fieldClass}>
               <option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="CONTRACT">Contract</option><option value="INTERNSHIP">Internship</option><option value="TEMPORARY">Temporary</option>
+            </select>
+          </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Salary from · Rand
+            <input type="number" min="0" value={salaryMin ?? ""} onChange={(event) => setSalaryMin(event.target.value === "" ? null : Number(event.target.value))} className={fieldClass} />
+          </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Salary to · Rand
+            <input type="number" min="0" value={salaryMax ?? ""} onChange={(event) => setSalaryMax(event.target.value === "" ? null : Number(event.target.value))} className={fieldClass} />
+          </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Salary period
+            <select value={salaryPeriod} onChange={(event) => setSalaryPeriod(event.target.value)} className={fieldClass}>
+              <option value="HOURLY">Hourly</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option>
             </select>
           </label>
           <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">

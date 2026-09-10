@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { daysLeftLabel } from "../format";
+import { daysLeftLabel, formatSalary } from "../format";
 
 function isoDaysFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString();
@@ -28,4 +28,8 @@ test("returns null beyond the 30-day urgency window", () => {
 
 test("30 days left is still shown, at the boundary", () => {
   assert.equal(daysLeftLabel(isoDaysFromNow(30)), "30 days left");
+});
+
+test("formats South African salaries in Rand with their advertised period", () => {
+  assert.equal(formatSalary(25_000, 35_000, "ZAR", "MONTHLY"), "R25 000–35 000/month");
 });

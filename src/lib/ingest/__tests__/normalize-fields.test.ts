@@ -12,6 +12,8 @@ function normalized(overrides: Partial<NormalizedJobFields> = {}): NormalizedJob
     title: "Forklift Operator",
     company: "Northwind Logistics",
     location: "Austin, TX",
+    industry: "TRANSPORT_LOGISTICS",
+    province: "NATIONWIDE",
     remoteType: "ONSITE",
     employmentType: "FULL_TIME",
     salaryMin: null,
@@ -85,7 +87,7 @@ test("nulls salaryMax/salaryCurrency together with a null salaryMin", () => {
   }
 });
 
-test("keeps salaryMax/salaryCurrency when salaryMin is present", () => {
+test("stores advertised South African salaries in Rand", () => {
   const result = buildNormalizedFields(
     aggregation({ salaryMin: 50_000, salaryMax: 60_000, salaryCurrency: "USD" }),
     URL,
@@ -93,7 +95,7 @@ test("keeps salaryMax/salaryCurrency when salaryMin is present", () => {
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.fields.salaryMax, 60_000);
-    assert.equal(result.fields.salaryCurrency, "USD");
+    assert.equal(result.fields.salaryCurrency, "ZAR");
   }
 });
 

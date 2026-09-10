@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jobIndustryValues, provinceValues } from "@/config/job-taxonomy";
 
 export const remoteTypeSchema = z.enum(["ONSITE", "HYBRID", "REMOTE"]);
 export const employmentTypeSchema = z.enum([
@@ -27,6 +28,8 @@ export const opportunityCategorySchema = z.enum([
   "CALL_FOR_APPLICATIONS",
   "FUNDING",
 ]);
+export const jobIndustrySchema = z.enum(jobIndustryValues);
+export const provinceSchema = z.enum(provinceValues);
 export const contentCategorySchema = z.enum(["HOW_TO", "CAREER_DEVELOPMENT"]);
 
 export const apiErrorSchema = z.object({

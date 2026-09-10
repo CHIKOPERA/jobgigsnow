@@ -1,5 +1,6 @@
-import type { AgentInsightKind, OpportunityCategory, Prisma } from "@/generated/prisma/client";
+import type { AgentInsightKind, JobIndustry, OpportunityCategory, Prisma, SouthAfricanProvince } from "@/generated/prisma/client";
 import { opportunityCategories } from "@/config/categories";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 import { prisma } from "@/lib/prisma";
 import { runTick } from "@/lib/ingest/tick";
 import { getAgentSettings } from "@/lib/ingest/settings";
@@ -8,6 +9,8 @@ import { buildLearningInsights, scoreSources, type LearningInsight } from "./lea
 import { johannesburgDateKey, johannesburgDayBounds } from "./time";
 
 const categoryKeys = Object.keys(opportunityCategories) as OpportunityCategory[];
+const industryKeys = Object.keys(jobIndustries) as JobIndustry[];
+const provinceKeys = Object.keys(provinces) as SouthAfricanProvince[];
 
 export async function collectDailySnapshot(agentRunId: string) {
   "use step";
@@ -15,11 +18,22 @@ export async function collectDailySnapshot(agentRunId: string) {
   const now = new Date();
   const dateKey = johannesburgDateKey(now);
   const { start, end } = johannesburgDayBounds(now);
-  const [google, categoryRows, savedJobs, publishedJobs] = await Promise.all([
+  const activeWhere = { status: "PUBLISHED" as const, OR: [{ closesAt: null }, { closesAt: { gte: now } }] };
+  const [google, categoryRows, industryRows, provinceRows, savedJobs, publishedJobs] = await Promise.all([
     collectGoogleMetrics(now),
     prisma.job.groupBy({
       by: ["category"],
-      where: { status: "PUBLISHED", OR: [{ closesAt: null }, { closesAt: { gte: now } }] },
+      where: activeWhere,
+      _count: { _all: true },
+    }),
+    prisma.job.groupBy({
+      by: ["industry"],
+      where: activeWhere,
+      _count: { _all: true },
+    }),
+    prisma.job.groupBy({
+      by: ["province"],
+      where: activeWhere,
       _count: { _all: true },
     }),
     prisma.savedJob.count({ where: { createdAt: { gte: start, lt: end } } }),
@@ -27,6 +41,10 @@ export async function collectDailySnapshot(agentRunId: string) {
   ]);
   const categoryCounts = Object.fromEntries(categoryKeys.map((key) => [key, 0])) as Record<string, number>;
   for (const row of categoryRows) categoryCounts[row.category] = row._count._all;
+  const industryCounts = Object.fromEntries(industryKeys.map((key) => [key, 0])) as Record<string, number>;
+  for (const row of industryRows) industryCounts[row.industry] = row._count._all;
+  const provinceCounts = Object.fromEntries(provinceKeys.map((key) => [key, 0])) as Record<string, number>;
+  for (const row of provinceRows) provinceCounts[row.province] = row._count._all;
 
   await prisma.dailySiteMetric.upsert({
     where: { dateKey },
@@ -44,6 +62,8 @@ export async function collectDailySnapshot(agentRunId: string) {
       savedJobs,
       publishedJobs,
       categoryCounts: categoryCounts as Prisma.InputJsonValue,
+      industryCounts: industryCounts as Prisma.InputJsonValue,
+      provinceCounts: provinceCounts as Prisma.InputJsonValue,
       topPages: google.topPages as unknown as Prisma.InputJsonValue,
       speed: google.speed as Prisma.InputJsonValue | undefined,
       integrations: google.integrations as Prisma.InputJsonValue,
@@ -61,13 +81,15 @@ export async function collectDailySnapshot(agentRunId: string) {
       savedJobs,
       publishedJobs,
       categoryCounts: categoryCounts as Prisma.InputJsonValue,
+      industryCounts: industryCounts as Prisma.InputJsonValue,
+      provinceCounts: provinceCounts as Prisma.InputJsonValue,
       topPages: google.topPages as unknown as Prisma.InputJsonValue,
       speed: google.speed === null ? undefined : google.speed as Prisma.InputJsonValue,
       integrations: google.integrations as Prisma.InputJsonValue,
       collectedAt: now,
     },
   });
-  return { dateKey, categoryCounts, ...google, savedJobs, publishedJobs };
+  return { dateKey, categoryCounts, industryCounts, provinceCounts, ...google, savedJobs, publishedJobs };
 }
 
 async function upsertInsights(insights: LearningInsight[]) {
@@ -113,19 +135,43 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
           select: { discoveredCount: true, failedCount: true, validationFailedCount: true, aiFailedCount: true },
         },
         rawJobs: {
-          where: { discoveredAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
-          select: { job: { select: { category: true, status: true, publishedAt: true } } },
+          where: { discoveredAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } },
+          select: { job: { select: { category: true, industry: true, province: true, status: true, publishedAt: true } } },
         },
       },
     }),
   ]);
   const categoryCounts = metric.categoryCounts as Record<string, number>;
+  const industryCounts = metric.industryCounts as Record<string, number>;
+  const profiles = new Map<string, Prisma.InputJsonValue>();
   const sourceInputs = sources.map((source) => {
-    const categoryFrequency = new Map<string, number>();
-    for (const raw of source.rawJobs) {
-      if (raw.job) categoryFrequency.set(raw.job.category, (categoryFrequency.get(raw.job.category) ?? 0) + 1);
-    }
-    const dominantCategory = [...categoryFrequency.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const jobs = source.rawJobs.flatMap((raw) => raw.job ? [raw.job] : []);
+    const specialtiesFor = (
+      dimension: "industry" | "opportunityType" | "province",
+      values: string[],
+      labelFor: (value: string) => string,
+    ) => values.map((value) => ({
+      dimension,
+      value,
+      label: labelFor(value),
+      count: jobs.filter((job) => job[dimension === "industry" ? "industry" : dimension === "province" ? "province" : "category"] === value).length,
+      published: jobs.filter((job) => job[dimension === "industry" ? "industry" : dimension === "province" ? "province" : "category"] === value && job.status === "PUBLISHED").length,
+    })).filter((item) => item.count > 0).sort((a, b) => b.count - a.count || b.published - a.published);
+    const industries = specialtiesFor("industry", industryKeys, (value) => jobIndustries[value as JobIndustry]);
+    const opportunityTypes = specialtiesFor("opportunityType", categoryKeys, (value) => opportunityCategories[value as OpportunityCategory].label);
+    const sourceProvinces = specialtiesFor("province", provinceKeys, (value) => provinces[value as SouthAfricanProvince]);
+    const specialties = [...industries.slice(0, 4), ...opportunityTypes.slice(0, 3), ...sourceProvinces.slice(0, 3)];
+    const coverageMatches = [
+      ...industries.filter((item) => item.value !== "OTHER" && (industryCounts[item.value] ?? 0) < settings.categoryMinimum),
+      ...opportunityTypes.filter((item) => (categoryCounts[item.value] ?? 0) < settings.categoryMinimum),
+    ].sort((a, b) => b.count - a.count).slice(0, 3).map((item) => item.label);
+    profiles.set(source.id, {
+      sampleSize: jobs.length,
+      industries: industries.slice(0, 4),
+      opportunityTypes: opportunityTypes.slice(0, 3),
+      provinces: sourceProvinces.slice(0, 3),
+      updatedAt: new Date().toISOString(),
+    } as unknown as Prisma.InputJsonValue);
     return {
       id: source.id,
       name: source.name,
@@ -136,13 +182,14 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
         0,
       ),
       published: source.rawJobs.filter((raw) => raw.job?.status === "PUBLISHED" && raw.job.publishedAt !== null).length,
-      dominantCategory,
+      coverageMatches,
+      specialties,
     };
   });
-  const learnedSources = scoreSources(sourceInputs, categoryCounts, settings.categoryMinimum);
+  const learnedSources = scoreSources(sourceInputs);
   await Promise.all(learnedSources.map((source) => prisma.source.update({
     where: { id: source.id },
-    data: { agentPriority: source.score, agentReason: source.reason },
+    data: { agentPriority: source.score, agentReason: source.reason, agentProfile: profiles.get(source.id) },
   })));
 
   const integrations = metric.integrations as Record<string, { connected: boolean }>;
@@ -151,6 +198,7 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
     pageViews: metric.pageViews,
     dailyViewGoal: settings.dailyViewGoal,
     categoryCounts,
+    industryCounts,
     categoryMinimum: settings.categoryMinimum,
     sources: learnedSources,
     speed,

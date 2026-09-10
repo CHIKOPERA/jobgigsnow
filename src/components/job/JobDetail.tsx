@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { SaveButton } from "./SaveButton";
 import { ApplyLink } from "./ApplyLink";
 import { descriptionContainsHtml, sanitizeJobDescription } from "@/lib/job-rich-text";
+import { jobIndustries, provinces } from "@/config/job-taxonomy";
 
 interface JobDetailProps {
   job: JobDetailDto;
@@ -53,6 +54,12 @@ export function JobDetail({ job, saved, image }: JobDetailProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
+        <span className="rounded-pill border border-line-strong px-2.5 py-[5px] text-[12px] text-ink-muted">
+          {jobIndustries[job.industry]}
+        </span>
+        <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
+          {provinces[job.province]}
+        </span>
         {salary && (
           <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">{salary}</span>
         )}

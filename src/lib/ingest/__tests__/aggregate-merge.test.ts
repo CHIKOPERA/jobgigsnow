@@ -24,6 +24,8 @@ function aiOutput(overrides: Partial<AiOutput> = {}): AiOutput {
     title: null,
     company: null,
     location: null,
+    industry: "OTHER",
+    province: "NATIONWIDE",
     description: null,
     applyUrl: null,
     remoteType: null,
@@ -50,8 +52,11 @@ function aiOutput(overrides: Partial<AiOutput> = {}): AiOutput {
 
 test("OpenAI strict schema requires every inferred confidence field", () => {
   const jsonSchema = zodSchema(aiOutputSchema).jsonSchema as {
+    required?: string[];
     properties?: { inferredFieldConfidence?: { required?: string[] } };
   };
+  assert.ok(jsonSchema.required?.includes("industry"));
+  assert.ok(jsonSchema.required?.includes("province"));
   assert.deepEqual(jsonSchema.properties?.inferredFieldConfidence?.required, [
     "remoteType",
     "employmentType",
@@ -74,6 +79,8 @@ test("automatic job creation applies the JobGigsNow editorial guide", () => {
   assert.match(prompt, /Never invent or estimate salary/);
   assert.match(prompt, /JobGigsNow verdict/);
   assert.match(prompt, /do not add a visible SEO-keyword dump/);
+  assert.match(prompt, /Classify every opportunity into exactly one industry/);
+  assert.match(prompt, /Only return salary amounts when the source\s+states R, rand, or ZAR/);
 });
 
 test("keeps the deterministic candidate's source/confidence when the AI agrees", () => {
