@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { site } from "@/config";
 import { prisma } from "@/lib/prisma";
+import { activePublishedJobWhere } from "@/lib/job-filters";
 import { opportunityCategories } from "@/config/categories";
 import { getAgentSettings } from "@/lib/ingest/settings";
 import { JobsShell } from "./JobsShell";
@@ -17,7 +18,7 @@ export async function generateMetadata({ searchParams }: JobsPageProps): Promise
     : null;
   const categoryOnly = category !== null && Object.entries(raw).every(([key, value]) => key === "category" || value === undefined || value === "");
   const [publishedCount, settings] = await Promise.all([
-    prisma.job.count({ where: { status: "PUBLISHED", ...(categoryOnly && { category }) } }),
+    prisma.job.count({ where: { ...activePublishedJobWhere(), ...(categoryOnly && { category }) } }),
     getAgentSettings(),
   ]);
   const categoryIsReady = categoryOnly && publishedCount >= settings.categoryMinimum;

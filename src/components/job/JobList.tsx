@@ -6,9 +6,10 @@ interface JobListProps {
   savedJobIds: Set<string>;
   activeSlug?: string;
   detailHref: (slug: string) => string;
+  singleColumn?: boolean;
 }
 
-export function JobList({ jobs, savedJobIds, activeSlug, detailHref }: JobListProps) {
+export function JobList({ jobs, savedJobIds, activeSlug, detailHref, singleColumn = false }: JobListProps) {
   if (jobs.length === 0) {
     return (
       <div
@@ -21,7 +22,7 @@ export function JobList({ jobs, savedJobIds, activeSlug, detailHref }: JobListPr
   }
 
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className={singleColumn ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
       {jobs.map((job) => (
         <li key={job.id}>
           <JobCard

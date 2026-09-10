@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { opportunityCategorySchema } from "./common";
 
 /**
  * Shape of Source.crawlConfig — owned entirely by the ingestion pipeline (discovery.ts /
@@ -19,7 +20,14 @@ const detailSelectorsSchema = z
 
 const fetchTimeoutMsSchema = z.number().int().min(1_000).max(120_000).optional();
 
+const sharedCrawlConfigFields = {
+  // Category-specific feeds can declare what they contain. Mixed feeds omit this and use the
+  // title/description classifier for each discovered opportunity.
+  categoryHint: opportunityCategorySchema.optional(),
+};
+
 const htmlCrawlConfigSchema = z.object({
+  ...sharedCrawlConfigFields,
   // Optional/defaulted for backward compatibility with sources created before providers existed.
   provider: z.literal("html").default("html"),
   // One or more listing pages to discover job-detail links from.
@@ -44,8 +52,11 @@ const htmlCrawlConfigSchema = z.object({
 });
 
 const smartRecruitersCrawlConfigSchema = z.object({
+  ...sharedCrawlConfigFields,
   provider: z.literal("smartrecruiters"),
   companyIdentifier: z.string().min(1),
+  query: z.string().min(1).optional(),
+  country: z.string().min(2).max(2).optional(),
   pageSize: z.number().int().positive().max(100).default(100),
   maxPages: z.number().int().positive().max(50).default(10),
   fetchTimeoutMs: fetchTimeoutMsSchema,
@@ -53,6 +64,7 @@ const smartRecruitersCrawlConfigSchema = z.object({
 });
 
 const workdayCrawlConfigSchema = z.object({
+  ...sharedCrawlConfigFields,
   provider: z.literal("workday"),
   host: z.string().min(1),
   tenant: z.string().min(1),
@@ -64,6 +76,7 @@ const workdayCrawlConfigSchema = z.object({
 });
 
 const oracleCrawlConfigSchema = z.object({
+  ...sharedCrawlConfigFields,
   provider: z.literal("oracle"),
   host: z.string().min(1),
   siteNumber: z.string().min(1),
@@ -76,6 +89,7 @@ const oracleCrawlConfigSchema = z.object({
 });
 
 const cornerstoneCrawlConfigSchema = z.object({
+  ...sharedCrawlConfigFields,
   provider: z.literal("cornerstone"),
   host: z.string().min(1),
   corp: z.string().min(1),

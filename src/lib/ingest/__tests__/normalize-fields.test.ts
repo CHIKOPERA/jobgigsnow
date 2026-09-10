@@ -50,6 +50,30 @@ test("reports every missing required field, not just the first", () => {
   }
 });
 
+test("does not reject funding because workplace-only fields are absent", () => {
+  const result = buildNormalizedFields(
+    aggregation({
+      location: null,
+      remoteType: null,
+      employmentType: null,
+      salaryMin: 50_000,
+      salaryMax: 50_000,
+      salaryCurrency: "ZAR",
+      salaryPeriod: "YEARLY",
+    }),
+    URL,
+    "FUNDING",
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.fields.location, "Not location-specific");
+    assert.equal(result.fields.salaryMin, null);
+    assert.equal(result.fields.salaryMax, null);
+    assert.equal(result.fields.salaryPeriod, null);
+  }
+});
+
 test("falls back to the source URL as applyUrl when nothing was found or inferred", () => {
   const result = buildNormalizedFields(aggregation({ applyUrl: null }), URL);
   assert.equal(result.ok, true);
@@ -68,11 +92,22 @@ test("converts a date-only postedAt into a full ISO datetime", () => {
   if (result.ok) assert.equal(result.fields.postedAt, "2026-08-01T00:00:00.000Z");
 });
 
+test("keeps a date-only closing deadline open through the end of that day", () => {
+  const result = buildNormalizedFields(aggregation({ closesAt: "2099-08-01" }), URL);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.fields.closesAt, "2099-08-01T23:59:59.999Z");
+});
+
 test("treats an unparseable date as null instead of throwing", () => {
   assert.doesNotThrow(() => buildNormalizedFields(aggregation({ postedAt: "not a date" }), URL));
   const result = buildNormalizedFields(aggregation({ postedAt: "not a date" }), URL);
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.fields.postedAt, null);
+});
+
+test("rejects a job whose closing date has passed", () => {
+  const result = buildNormalizedFields(aggregation({ closesAt: "2020-01-01" }), URL);
+  assert.deepEqual(result, { ok: false, missingFields: ["closesAt (expired)"] });
 });
 
 test("nulls salaryMax/salaryCurrency together with a null salaryMin", () => {

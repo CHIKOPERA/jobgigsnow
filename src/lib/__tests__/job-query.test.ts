@@ -87,7 +87,9 @@ test("postedWithin filters postedAt within the last N days", () => {
   assert.ok(daysAgo >= 6.99 && daysAgo <= 7.01, `expected ~7 days, got ${daysAgo}`);
 });
 
-test("no filters beyond status when the query is empty", () => {
+test("an empty query still excludes expired published jobs", () => {
   const where = buildJobWhere(query());
-  assert.deepEqual(where, { status: "PUBLISHED" });
+  assert.equal(where.status, "PUBLISHED");
+  assert.deepEqual((where.OR as unknown[])[0], { closesAt: null });
+  assert.ok(((where.OR as Array<{ closesAt?: { gte?: unknown } }>)[1].closesAt?.gte) instanceof Date);
 });

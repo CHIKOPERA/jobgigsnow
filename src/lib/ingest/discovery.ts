@@ -109,7 +109,10 @@ async function crawlSmartRecruiters(
   const timeoutMs = config.fetchTimeoutMs ?? sourcesConfig.defaultFetchTimeoutMs;
 
   for (let page = 0; page < config.maxPages; page++) {
-    const endpoint = buildSmartRecruitersPageUrl(config.companyIdentifier, config.pageSize, offset);
+    const endpoint = buildSmartRecruitersPageUrl(config.companyIdentifier, config.pageSize, offset, {
+      query: config.query,
+      country: config.country,
+    });
     try {
       const parsed = parseSmartRecruitersPage(
         await fetchSmartRecruitersPage(endpoint, timeoutMs),

@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { filters } from "@/config/filters";
 import type { JobCardDto, JobDetailDto } from "./validation/job";
+import { plainTextDescription } from "./job-seo";
 
 export const jobCardSelect = {
   id: true,
@@ -20,6 +21,9 @@ export const jobCardSelect = {
   status: true,
   postedAt: true,
   closesAt: true,
+  description: true,
+  socialImageUrl: true,
+  socialImageAlt: true,
   company: { select: { name: true, slug: true } },
   tags: { select: { tag: { select: { name: true } } } },
 } satisfies Prisma.JobSelect;
@@ -44,6 +48,7 @@ function isNew(postedAt: Date | null) {
 }
 
 export function toJobCard(row: JobCardRow): JobCardDto {
+  const description = plainTextDescription(row.description);
   return {
     id: row.id,
     slug: row.slug,
@@ -65,6 +70,9 @@ export function toJobCard(row: JobCardRow): JobCardDto {
     isNew: isNew(row.postedAt),
     postedAt: row.postedAt?.toISOString() ?? null,
     closesAt: row.closesAt?.toISOString() ?? null,
+    summary: description.length > 190 ? `${description.slice(0, 187).trimEnd()}…` : description,
+    imageUrl: row.socialImageUrl,
+    imageAlt: row.socialImageAlt,
   };
 }
 

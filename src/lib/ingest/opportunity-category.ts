@@ -22,7 +22,7 @@ const TITLE_RULES: CategoryRule[] = [
   { category: "INTERNSHIP", pattern: /\b(?:internships?|intern programme|intern program|student intern)\b/i },
   {
     category: "GRADUATE_PROGRAMME",
-    pattern: /\b(?:graduate|graduates|young professional|management trainee)\s+(?:development\s+)?(?:programme|program|scheme|opportunit(?:y|ies))\b/i,
+    pattern: /\b(?:graduate|graduates|young professional|management trainee)\s+(?:development\s+)?(?:programme|program|scheme|opportunit(?:y|ies))\b|\b(?:[a-z][\w&/-]*\s+){1,5}graduate\b(?!\s+(?:recruitment|recruiter|manager))/i,
   },
   { category: "CALL_FOR_APPLICATIONS", pattern: /\bcall\s+for\s+(?:applications?|proposals?|submissions?|nominations?)\b/i },
 ];
@@ -65,4 +65,16 @@ export function classifyOpportunity(fields: NormalizedJobFields): OpportunityCat
   }
 
   return "JOB";
+}
+
+/** Adds the tags used by Funding's bursary/scholarship/fellowship sub-navigation. */
+export function deriveOpportunityTags(fields: NormalizedJobFields, category: OpportunityCategory): string[] {
+  if (category !== "FUNDING") return [];
+
+  const text = `${plainText(fields.title)} ${plainText(fields.description)}`;
+  const tags: string[] = [];
+  if (/\bbursar(?:y|ies)\b/i.test(text)) tags.push("Bursary");
+  if (/\bscholarships?\b/i.test(text)) tags.push("Scholarship");
+  if (/\bfellowships?\b/i.test(text)) tags.push("Fellowship");
+  return tags;
 }

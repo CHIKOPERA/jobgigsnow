@@ -9,9 +9,10 @@ interface LoadMoreJobsProps {
   initialCursor: string | null;
   queryString: string;
   detailBasePath: string;
+  singleColumn?: boolean;
 }
 
-export function LoadMoreJobs({ initialCursor, queryString, detailBasePath }: LoadMoreJobsProps) {
+export function LoadMoreJobs({ initialCursor, queryString, detailBasePath, singleColumn = false }: LoadMoreJobsProps) {
   const [jobs, setJobs] = useState<JobListResponse["jobs"]>([]);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export function LoadMoreJobs({ initialCursor, queryString, detailBasePath }: Loa
           jobs={jobs}
           savedJobIds={new Set()}
           detailHref={(slug) => `${detailBasePath}/${slug}?${queryString}`}
+          singleColumn={singleColumn}
         />
       )}
       {cursor && (

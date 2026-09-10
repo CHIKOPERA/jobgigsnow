@@ -3,14 +3,16 @@ import { site } from "@/config";
 import { prisma } from "@/lib/prisma";
 import { opportunityCategories } from "@/config/categories";
 import { getAgentSettings } from "@/lib/ingest/settings";
+import { activePublishedJobWhere } from "@/lib/job-filters";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = site.url.replace(/\/$/, "");
+  const activeJobs = activePublishedJobWhere();
   const [jobs, articles, courses, categoryRows, settings] = await Promise.all([
     prisma.job.findMany({
-      where: { status: "PUBLISHED" },
+      where: activeJobs,
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: "desc" },
       take: 45_000,
@@ -27,7 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       orderBy: { updatedAt: "desc" },
       take: 2_500,
     }),
-    prisma.job.groupBy({ by: ["category"], where: { status: "PUBLISHED" }, _count: { _all: true } }),
+    prisma.job.groupBy({ by: ["category"], where: activeJobs, _count: { _all: true } }),
     getAgentSettings(),
   ]);
 

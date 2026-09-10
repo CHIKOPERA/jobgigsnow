@@ -8,12 +8,24 @@ export interface SmartRecruitersPage {
   totalFound: number;
 }
 
-export function buildSmartRecruitersPageUrl(companyIdentifier: string, limit: number, offset: number): string {
+export interface SmartRecruitersFilters {
+  query?: string;
+  country?: string;
+}
+
+export function buildSmartRecruitersPageUrl(
+  companyIdentifier: string,
+  limit: number,
+  offset: number,
+  filters: SmartRecruitersFilters = {},
+): string {
   const url = new URL(
     `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(companyIdentifier)}/postings`,
   );
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("offset", String(offset));
+  if (filters.query) url.searchParams.set("q", filters.query);
+  if (filters.country) url.searchParams.set("country", filters.country);
   return url.toString();
 }
 

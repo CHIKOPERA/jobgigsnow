@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { site } from "@/config";
+import { activePublishedJobWhere } from "@/lib/job-filters";
+import { prisma } from "@/lib/prisma";
 import { CategoryNav } from "./CategoryNav";
 
-export function Header() {
+export async function Header() {
+  const categoryRows = await prisma.job.groupBy({
+    by: ["category"],
+    where: activePublishedJobWhere(),
+    _count: { _all: true },
+  });
+  const availableCategories = categoryRows
+    .filter((row) => row._count._all > 0)
+    .map((row) => row.category);
+
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center px-4 md:px-6">
@@ -56,7 +67,7 @@ export function Header() {
           </Show>
         </div>
       </div>
-      <CategoryNav />
+      <CategoryNav availableCategories={availableCategories} />
     </header>
   );
 }

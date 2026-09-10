@@ -2,6 +2,7 @@ import "server-only";
 import type { IngestRunStatus, Prisma } from "@/generated/prisma/client";
 import { searchPexels } from "@/lib/pexels";
 import { importJobSocialImage } from "@/lib/job-social-image";
+import { hasExpiredJsonLdDeadline } from "@/lib/job-expiration";
 import { prepareAutomaticPublication } from "./auto-publish";
 import { prisma } from "@/lib/prisma";
 import { ai as aiConfig } from "@/config/ai";
@@ -191,6 +192,7 @@ interface AggregationCandidate {
   ingestRunId: string | null;
   payload: unknown;
   rawTitle: string | null;
+  source: { crawlConfig: unknown } | null;
   ingestRun: { status: IngestRunStatus } | null;
 }
 
@@ -206,8 +208,19 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
   if (claim.count === 0) return "skipped";
 
   try {
-    await report?.("rewriting", row.rawTitle ?? undefined);
     const bundle = row.payload as unknown as RawExtractionBundle;
+
+    // Avoid paying for an AI rewrite when the authoritative structured deadline has passed.
+    if (hasExpiredJsonLdDeadline(bundle.jsonLd)) {
+      await prisma.rawJob.update({
+        where: { id: row.id },
+        data: { active: false, needsAggregation: false, aggregationClaimedAt: null },
+      });
+      if (row.ingestRunId) await maybeIncrementCounters(row.ingestRunId, { inactiveCount: 1 });
+      return "skipped";
+    }
+
+    await report?.("rewriting", row.rawTitle ?? undefined);
 
     const { result, inputTokens, outputTokens } = await aggregate({
       externalUrl: row.externalUrl,
@@ -216,7 +229,8 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
       readableText: bundle.readableText,
     });
 
-    const normalized = await normalize(result, row.id, row.externalUrl);
+    const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
+    const normalized = await normalize(result, row.id, row.externalUrl, config?.categoryHint);
 
     if (!normalized.ok) {
       await prisma.$transaction([
@@ -357,6 +371,7 @@ export async function processQueuedRawJob(rawJobId: string, report?: JobStageRep
       rawTitle: true,
       fetchStatus: true,
       needsAggregation: true,
+      source: { select: { crawlConfig: true } },
       ingestRun: { select: { status: true } },
     },
   });

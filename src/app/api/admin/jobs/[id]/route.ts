@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import { errorResponse } from "@/lib/validation/common";
 import { jobReviewPatchSchema } from "@/lib/validation/job-review";
+import { isExpiredClosingDate } from "@/lib/job-expiration";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/admin/jobs/[id]">) {
   const admin = await requireAdmin();
@@ -24,9 +25,12 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
     const body = jobReviewPatchSchema.parse(await request.json());
     const existing = await prisma.job.findUnique({
       where: { id },
-      select: { id: true, postedAt: true, publishedAt: true },
+      select: { id: true, postedAt: true, publishedAt: true, closesAt: true },
     });
     if (!existing) return errorResponse("NOT_FOUND", "Job not found.", 404);
+    if (body.status === "PUBLISHED" && isExpiredClosingDate(existing.closesAt)) {
+      return errorResponse("JOB_EXPIRED", "An expired job cannot be published.", 400);
+    }
 
     const description = body.description ? sanitizeJobDescription(body.description) : undefined;
     if (body.description && !description) {

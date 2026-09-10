@@ -51,6 +51,9 @@ export const jobCardSchema = z.object({
   isNew: z.boolean(),
   postedAt: z.iso.datetime().nullable(),
   closesAt: z.iso.datetime().nullable(),
+  summary: z.string(),
+  imageUrl: z.string().nullable(),
+  imageAlt: z.string().nullable(),
 });
 export type JobCardDto = z.infer<typeof jobCardSchema>;
 

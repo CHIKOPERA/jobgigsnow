@@ -9,6 +9,13 @@ test("buildSmartRecruitersPageUrl includes the company and pagination", () => {
   );
 });
 
+test("buildSmartRecruitersPageUrl applies optional query and country filters", () => {
+  assert.equal(
+    buildSmartRecruitersPageUrl("StandardBankGroup", 100, 0, { query: "graduate", country: "za" }),
+    "https://api.smartrecruiters.com/v1/companies/StandardBankGroup/postings?limit=100&offset=0&q=graduate&country=za",
+  );
+});
+
 test("parseSmartRecruitersPage keeps valid public posting URLs", () => {
   const parsed = parseSmartRecruitersPage({
     totalFound: 3,

@@ -1,6 +1,13 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { JobListQuery } from "@/lib/validation/job";
 
+export function activePublishedJobWhere(now = new Date()): Prisma.JobWhereInput {
+  return {
+    status: "PUBLISHED",
+    OR: [{ closesAt: null }, { closesAt: { gte: now } }],
+  };
+}
+
 export function buildJobWhere(query: Partial<JobListQuery>): Prisma.JobWhereInput {
   const { q, category, industry, province, location, remote, employmentType, salaryMin, tags, company, postedWithin } =
     query;
@@ -29,7 +36,7 @@ export function buildJobWhere(query: Partial<JobListQuery>): Prisma.JobWhereInpu
   }
 
   return {
-    status: "PUBLISHED",
+    ...activePublishedJobWhere(),
     ...(category && { category }),
     ...(industry && { industry }),
     ...(province && { province }),

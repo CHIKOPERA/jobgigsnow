@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import type { OpportunityCategory } from "@/generated/prisma/client";
 import { navItems, type NavItem } from "@/config/categories";
 
-const opportunityNavItems = navItems.filter(
+const allOpportunityNavItems = navItems.filter(
   (item): item is Extract<NavItem, { kind: "opportunity" }> =>
     item.kind === "opportunity" && item.category.value !== "JOB",
 );
 
-export function CategoryNav() {
+export function CategoryNav({ availableCategories }: { availableCategories: OpportunityCategory[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const available = new Set(availableCategories);
+  const opportunityNavItems = allOpportunityNavItems.filter((item) => available.has(item.category.value));
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -29,6 +32,8 @@ export function CategoryNav() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, []);
+
+  if (opportunityNavItems.length === 0) return null;
 
   return (
     <nav aria-label="Browse opportunities" className="border-t border-line/70 bg-bg/70" ref={containerRef}>

@@ -27,6 +27,7 @@ interface JobDetailProps {
 
 export function JobDetail({ job, saved, image }: JobDetailProps) {
   const isClosed = job.status !== "PUBLISHED";
+  const showEmploymentFacets = job.category !== "FUNDING" && job.category !== "CALL_FOR_APPLICATIONS";
   const salary = formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryPeriod);
   const richDescription = descriptionContainsHtml(job.description) ? sanitizeJobDescription(job.description) : null;
 
@@ -60,15 +61,19 @@ export function JobDetail({ job, saved, image }: JobDetailProps) {
         <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
           {provinces[job.province]}
         </span>
-        {salary && (
+        {showEmploymentFacets && salary && (
           <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">{salary}</span>
         )}
-        <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
-          {remoteLabel(job.remoteType)}
-        </span>
-        <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
-          {employmentLabel(job.employmentType)}
-        </span>
+        {showEmploymentFacets && (
+          <>
+            <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
+              {remoteLabel(job.remoteType)}
+            </span>
+            <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
+              {employmentLabel(job.employmentType)}
+            </span>
+          </>
+        )}
         {!isClosed && daysLeftLabel(job.closesAt) && (
           <span className="rounded-pill bg-bg px-2.5 py-[5px] text-[12px] text-[#2b2d24]">
             {daysLeftLabel(job.closesAt)}

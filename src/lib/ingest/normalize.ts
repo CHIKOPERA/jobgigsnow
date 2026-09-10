@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import type { JobUpsertInput } from "@/lib/validation/ingest";
 import { buildNormalizedFields } from "./normalize-fields";
-import { classifyOpportunity } from "./opportunity-category";
+import { classifyOpportunity, deriveOpportunityTags, type OpportunityCategory } from "./opportunity-category";
 import { aggregatedJobStatus } from "./review-policy";
 import type { AggregationResult } from "./types";
 
@@ -32,8 +32,10 @@ export async function normalize(
   aggregation: AggregationResult,
   rawJobId: string,
   externalUrl: string,
+  categoryHint?: OpportunityCategory,
 ): Promise<NormalizeResult> {
-  const built = buildNormalizedFields(aggregation, externalUrl);
+  const category = categoryHint ?? classifyOpportunity(aggregation.normalized);
+  const built = buildNormalizedFields(aggregation, externalUrl, category);
   if (!built.ok) return built;
 
   const slug = await resolveSlug(rawJobId, built.fields.title, built.fields.companyName);
@@ -43,9 +45,10 @@ export async function normalize(
     input: {
       slug,
       rawJobId,
-      category: classifyOpportunity(aggregation.normalized),
+      category,
       highlights: [],
       ...built.fields,
+      tags: [...new Set([...built.fields.tags, ...deriveOpportunityTags(aggregation.normalized, category)])],
       isNative: false,
       status: aggregatedJobStatus,
     },

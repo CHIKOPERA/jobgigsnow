@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyOpportunity } from "../opportunity-category";
+import { classifyOpportunity, deriveOpportunityTags } from "../opportunity-category";
 import type { NormalizedJobFields } from "../types";
 
 function listing(overrides: Partial<NormalizedJobFields> = {}): NormalizedJobFields {
@@ -46,6 +46,11 @@ test("classifies each supported specialist opportunity type from its title", () 
   assert.equal(classifyOpportunity(listing({ title: "Postgraduate Bursary 2027" })), "FUNDING");
 });
 
+test("classifies discipline-first graduate titles as graduate opportunities", () => {
+  assert.equal(classifyOpportunity(listing({ title: "Finance Graduate" })), "GRADUATE_PROGRAMME");
+  assert.equal(classifyOpportunity(listing({ title: "Behavioural Economics Graduate" })), "GRADUATE_PROGRAMME");
+});
+
 test("specific categories take precedence over generic application language", () => {
   assert.equal(
     classifyOpportunity(listing({ title: "Call for Applications: Research Scholarship" })),
@@ -69,4 +74,15 @@ test("does not treat incidental internship experience as the advertised category
 
 test("falls back to JOB when there is no specialist opportunity signal", () => {
   assert.equal(classifyOpportunity(listing()), "JOB");
+});
+
+test("derives funding subcategory tags from source wording", () => {
+  assert.deepEqual(
+    deriveOpportunityTags(
+      listing({ title: "Postgraduate Bursary and Scholarship", description: "Includes a research fellowship." }),
+      "FUNDING",
+    ),
+    ["Bursary", "Scholarship", "Fellowship"],
+  );
+  assert.deepEqual(deriveOpportunityTags(listing(), "JOB"), []);
 });

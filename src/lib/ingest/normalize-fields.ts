@@ -5,6 +5,8 @@
 import type { AggregationResult } from "./types";
 import { toEditorHtml } from "@/lib/job-rich-text";
 import type { JobIndustryValue, ProvinceValue } from "@/config/job-taxonomy";
+import { isExpiredClosingDate } from "@/lib/job-expiration";
+import type { OpportunityCategory } from "./opportunity-category";
 
 export interface NormalizedFields {
   title: string;
@@ -30,13 +32,18 @@ export type NormalizeFieldsResult = { ok: true; fields: NormalizedFields } | { o
 // Required by jobUpsertInputSchema (src/lib/validation/ingest.ts) with no default — if the
 // aggregation stage couldn't support one of these with anything from the page, this is a
 // validation failure, not something to paper over with a placeholder.
-function findMissingFields(normalized: AggregationResult["normalized"]): string[] {
+function findMissingFields(
+  normalized: AggregationResult["normalized"],
+  category: OpportunityCategory,
+): string[] {
   const missing: string[] = [];
   if (!normalized.title) missing.push("title");
   if (!normalized.company) missing.push("company");
-  if (!normalized.location) missing.push("location");
-  if (!normalized.remoteType) missing.push("remoteType");
-  if (!normalized.employmentType) missing.push("employmentType");
+  if (category !== "FUNDING" && category !== "CALL_FOR_APPLICATIONS") {
+    if (!normalized.location) missing.push("location");
+    if (!normalized.remoteType) missing.push("remoteType");
+    if (!normalized.employmentType) missing.push("employmentType");
+  }
   if (!normalized.description) missing.push("description");
   return missing;
 }
@@ -47,32 +54,50 @@ function toIsoDateTime(dateStr: string | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export function buildNormalizedFields(aggregation: AggregationResult, externalUrl: string): NormalizeFieldsResult {
+function toClosingIsoDateTime(dateStr: string | null): string | null {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) return `${dateStr.trim()}T23:59:59.999Z`;
+  return toIsoDateTime(dateStr);
+}
+
+export function buildNormalizedFields(
+  aggregation: AggregationResult,
+  externalUrl: string,
+  category: OpportunityCategory = "JOB",
+): NormalizeFieldsResult {
   const { normalized } = aggregation;
-  const missingFields = findMissingFields(normalized);
+  if (isExpiredClosingDate(normalized.closesAt)) {
+    return { ok: false, missingFields: ["closesAt (expired)"] };
+  }
+  const missingFields = findMissingFields(normalized, category);
   if (missingFields.length > 0) return { ok: false, missingFields };
+
+  // These columns predate non-employment opportunities and remain non-null in the database.
+  // Compatibility values are hidden on funding/call cards; they must not block otherwise valid
+  // bursaries, scholarships, fellowships, or calls that have no workplace attributes.
+  const isNonEmploymentOpportunity = category === "FUNDING" || category === "CALL_FOR_APPLICATIONS";
 
   return {
     ok: true,
     fields: {
       title: normalized.title!,
       companyName: normalized.company!,
-      location: normalized.location!,
+      location: normalized.location ?? "Not location-specific",
       industry: normalized.industry,
       province: normalized.province,
-      remoteType: normalized.remoteType!,
-      employmentType: normalized.employmentType!,
-      salaryMin: normalized.salaryMin,
-      salaryMax: normalized.salaryMin !== null ? normalized.salaryMax : null,
-      salaryCurrency: normalized.salaryMin !== null ? "ZAR" : null,
-      salaryPeriod: normalized.salaryPeriod,
+      remoteType: normalized.remoteType ?? "ONSITE",
+      employmentType: normalized.employmentType ?? "TEMPORARY",
+      salaryMin: isNonEmploymentOpportunity ? null : normalized.salaryMin,
+      salaryMax: !isNonEmploymentOpportunity && normalized.salaryMin !== null ? normalized.salaryMax : null,
+      salaryCurrency: !isNonEmploymentOpportunity && normalized.salaryMin !== null ? "ZAR" : null,
+      salaryPeriod: isNonEmploymentOpportunity ? null : normalized.salaryPeriod,
       description: toEditorHtml(normalized.description!),
       tags: normalized.skills,
       // No apply link found or inferred — the safe default is the page itself, since that's
       // always a valid way to apply (never null, never a fabricated URL).
       applyUrl: normalized.applyUrl ?? externalUrl,
       postedAt: toIsoDateTime(normalized.postedAt),
-      closesAt: toIsoDateTime(normalized.closesAt),
+      closesAt: toClosingIsoDateTime(normalized.closesAt),
     },
   };
 }
