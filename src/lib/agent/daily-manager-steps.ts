@@ -4,8 +4,15 @@ import { jobIndustries, provinces } from "@/config/job-taxonomy";
 import { prisma } from "@/lib/prisma";
 import { runTick } from "@/lib/ingest/tick";
 import { getAgentSettings } from "@/lib/ingest/settings";
+import { publishReadyJobs } from "@/lib/ingest/publication-queue";
+import type { CrawlConfig } from "@/lib/validation/source";
 import { collectGoogleMetrics } from "./google-metrics";
-import { buildLearningInsights, scoreSources, type LearningInsight } from "./learning-policy";
+import {
+  buildLearningInsights,
+  coverageMatchesForDeclaredCategories,
+  scoreSources,
+  type LearningInsight,
+} from "./learning-policy";
 import { johannesburgDateKey, johannesburgDayBounds } from "./time";
 
 const categoryKeys = Object.keys(opportunityCategories) as OpportunityCategory[];
@@ -130,6 +137,7 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
       select: {
         id: true,
         name: true,
+        crawlConfig: true,
         ingestRuns: {
           where: { startedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
           select: { discoveredCount: true, failedCount: true, validationFailedCount: true, aiFailedCount: true },
@@ -143,8 +151,14 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
   ]);
   const categoryCounts = metric.categoryCounts as Record<string, number>;
   const industryCounts = metric.industryCounts as Record<string, number>;
+  const categoryLabels = Object.fromEntries(categoryKeys.map((key) => [key, opportunityCategories[key].label]));
   const profiles = new Map<string, Prisma.InputJsonValue>();
   const sourceInputs = sources.map((source) => {
+    const crawlConfig = source.crawlConfig as unknown as CrawlConfig;
+    const declaredCategories = [...new Set([
+      ...(crawlConfig.categoryHint ? [crawlConfig.categoryHint] : []),
+      ...(crawlConfig.coverageHints ?? []),
+    ])];
     const jobs = source.rawJobs.flatMap((raw) => raw.job ? [raw.job] : []);
     const specialtiesFor = (
       dimension: "industry" | "opportunityType" | "province",
@@ -161,12 +175,22 @@ export async function learnFromDailySnapshot(agentRunId: string, dateKey: string
     const opportunityTypes = specialtiesFor("opportunityType", categoryKeys, (value) => opportunityCategories[value as OpportunityCategory].label);
     const sourceProvinces = specialtiesFor("province", provinceKeys, (value) => provinces[value as SouthAfricanProvince]);
     const specialties = [...industries.slice(0, 4), ...opportunityTypes.slice(0, 3), ...sourceProvinces.slice(0, 3)];
-    const coverageMatches = [
+    const historicalCoverageMatches = [
       ...industries.filter((item) => item.value !== "OTHER" && (industryCounts[item.value] ?? 0) < settings.categoryMinimum),
       ...opportunityTypes.filter((item) => (categoryCounts[item.value] ?? 0) < settings.categoryMinimum),
-    ].sort((a, b) => b.count - a.count).slice(0, 3).map((item) => item.label);
+    ].sort((a, b) => b.count - a.count).map((item) => item.label);
+    const coverageMatches = [...new Set([
+      ...historicalCoverageMatches,
+      ...coverageMatchesForDeclaredCategories(
+        declaredCategories,
+        categoryCounts,
+        settings.categoryMinimum,
+        categoryLabels,
+      ),
+    ])].slice(0, 3);
     profiles.set(source.id, {
       sampleSize: jobs.length,
+      declaredOpportunityTypes: declaredCategories,
       industries: industries.slice(0, 4),
       opportunityTypes: opportunityTypes.slice(0, 3),
       provinces: sourceProvinces.slice(0, 3),
@@ -249,9 +273,18 @@ export async function runGoalManagedPublishing(agentRunId: string, cycle: number
   const { start, end } = johannesburgDayBounds();
   const alreadyPublished = await prisma.job.count({ where: { publishedAt: { gte: start, lt: end } } });
   const remaining = Math.max(0, settings.dailyPublishMax - alreadyPublished);
-  if (remaining === 0) return { cycle, skipped: true, reason: "The daily publication maximum is already reached.", published: 0 };
-  const result = await runTick(undefined, { maxPublications: remaining });
-  return { cycle, skipped: false, published: result.aggregationProcessed, processed: result.acquisitionProcessed };
+  const ready = await publishReadyJobs(remaining);
+  const result = await runTick(undefined, { maxPublications: Math.max(0, remaining - ready.published) });
+  return {
+    cycle,
+    skipped: false,
+    published: ready.published + result.aggregationProcessed,
+    publishedFromQueue: ready.published,
+    expiredInQueue: ready.expired,
+    queued: result.sourceRuns.reduce((sum, run) => sum + run.queued, 0),
+    processed: result.acquisitionProcessed,
+    sourcesChecked: result.discoveryRunIds.length,
+  };
 }
 
 export async function finishAgentRun(agentRunId: string, dateKey: string, learning: unknown, publishing: unknown, indexing: unknown) {

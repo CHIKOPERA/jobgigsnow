@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildLearningInsights, scoreSources } from "../learning-policy";
+import {
+  buildLearningInsights,
+  coverageMatchesForDeclaredCategories,
+  scoreSources,
+} from "../learning-policy";
 
 test("source learning rewards reliability and matches between source history and coverage gaps", () => {
   const scores = scoreSources([
@@ -29,4 +33,15 @@ test("learning reports goals and missing measurement without inventing performan
   assert.equal(insights.some((item) => item.fingerprint === "category:INTERNSHIP:coverage"), true);
   assert.equal(insights.some((item) => item.fingerprint === "industry:TECHNOLOGY:coverage"), true);
   assert.equal(insights.some((item) => item.fingerprint === "system:measurement-connections"), true);
+});
+
+test("declared source categories match current gaps before the source has history", () => {
+  const matches = coverageMatchesForDeclaredCategories(
+    ["FUNDING", "LEARNERSHIP", "JOB"],
+    { FUNDING: 1, LEARNERSHIP: 0, JOB: 20 },
+    5,
+    { FUNDING: "Funding Your Studies", LEARNERSHIP: "Learnerships", JOB: "Jobs" },
+  );
+
+  assert.deepEqual(matches, ["Funding Your Studies", "Learnerships"]);
 });

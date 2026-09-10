@@ -20,6 +20,7 @@ import { hashAggregationInput } from "./hash";
 import { upsertJob } from "./job-service";
 import { normalize } from "./normalize";
 import { reconcile } from "./reconcile";
+import { selectDueSourceIds } from "./source-schedule";
 import {
   finalizeRunIfComplete,
   incrementRunCounters,
@@ -55,12 +56,7 @@ async function findDueSourceIds(): Promise<string[]> {
     select: { id: true, cadenceMinutes: true, lastRunAt: true, agentPriority: true },
   });
 
-  const due = enabledSources
-    .filter((s) => !s.lastRunAt || now - s.lastRunAt.getTime() >= s.cadenceMinutes * 60_000)
-    .sort((a, b) => b.agentPriority - a.agentPriority || (a.lastRunAt?.getTime() ?? 0) - (b.lastRunAt?.getTime() ?? 0))
-    .slice(0, ingest.discoveryPerTick);
-
-  return due.map((source) => source.id);
+  return selectDueSourceIds(enabledSources, now, ingest.discoveryPerTick);
 }
 
 async function findRunningRunIds(): Promise<string[]> {
@@ -196,7 +192,13 @@ interface AggregationCandidate {
   ingestRun: { status: IngestRunStatus } | null;
 }
 
-async function processAggregation(row: AggregationCandidate, report?: JobStageReporter): Promise<"published" | "failed" | "skipped"> {
+type ProcessingOutcome = "published" | "ready" | "updated" | "failed" | "skipped";
+
+async function processAggregation(
+  row: AggregationCandidate,
+  report?: JobStageReporter,
+  publishNow = true,
+): Promise<ProcessingOutcome> {
   if (row.ingestRun && row.ingestRun.status !== "RUNNING") return "skipped";
   const claim = await prisma.rawJob.updateMany({
     where: {
@@ -231,6 +233,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
 
     const config = row.source?.crawlConfig as unknown as CrawlConfig | undefined;
     const normalized = await normalize(result, row.id, row.externalUrl, config?.categoryHint);
+    let successfulOutcome: ProcessingOutcome = "failed";
 
     if (!normalized.ok) {
       await prisma.$transaction([
@@ -262,6 +265,8 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
       }
     } else {
       const job = await upsertJob(normalized.input);
+      const wasAlreadyPublished = job.status === "PUBLISHED";
+      successfulOutcome = wasAlreadyPublished ? "updated" : publishNow ? "published" : "ready";
 
       await report?.("image", normalized.input.title);
       await prepareAutomaticPublication(
@@ -273,14 +278,16 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
           socialImageSourceUrl: photo.photographerUrl,
         }),
         async (image) => {
-          await report?.("publishing", normalized.input.title);
+          if (publishNow && !wasAlreadyPublished) await report?.("publishing", normalized.input.title);
           return prisma.job.update({
             where: { id: job.id },
             data: {
               ...(image ?? {}),
-              status: "PUBLISHED",
-              publishedAt: job.publishedAt ?? new Date(),
-              postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
+              ...(!wasAlreadyPublished && publishNow && {
+                status: "PUBLISHED",
+                publishedAt: job.publishedAt ?? new Date(),
+                postedAt: normalized.input.postedAt ? new Date(normalized.input.postedAt) : new Date(),
+              }),
             },
           });
         },
@@ -311,7 +318,7 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
     }
 
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
-    return normalized.ok ? "published" : "failed";
+    return normalized.ok ? successfulOutcome : "failed";
   } catch (err) {
     // needsAggregation is deliberately left true — a transient AI/network failure is retried by
     // the next tick automatically (Section F, point 11), unlike a validation failure above.
@@ -331,7 +338,11 @@ async function processAggregation(row: AggregationCandidate, report?: JobStageRe
 }
 
 /** Processes one queued detail URL immediately from capture through publication. */
-export async function processQueuedRawJob(rawJobId: string, report?: JobStageReporter): Promise<"published" | "failed" | "skipped"> {
+export async function processQueuedRawJob(
+  rawJobId: string,
+  report?: JobStageReporter,
+  publishNow = true,
+): Promise<ProcessingOutcome> {
   const acquisition = await prisma.rawJob.findUnique({
     where: { id: rawJobId },
     select: {
@@ -376,7 +387,7 @@ export async function processQueuedRawJob(rawJobId: string, report?: JobStageRep
     },
   });
   if (aggregation?.fetchStatus === "FETCHED" && aggregation.needsAggregation) {
-    return processAggregation(aggregation, report);
+    return processAggregation(aggregation, report, publishNow);
   }
   return "skipped";
 }
@@ -390,6 +401,7 @@ export interface SimpleImportResult {
   found: number;
   processed: number;
   published: number;
+  queued: number;
   skipped: number;
   failed: number;
   elapsedMs: number;
@@ -411,6 +423,7 @@ async function processRunJobs(
       found: run?.discoveredCount ?? 0,
       processed: 0,
       published: 0,
+      queued: 0,
       skipped: 0,
       failed: run?.status === "FAILED" ? Math.max(run.failedCount, 1) : 0,
       elapsedMs: Date.now() - startedAt,
@@ -439,6 +452,7 @@ async function processRunJobs(
     found: rows.length,
     processed: 0,
     published: 0,
+    queued: 0,
     skipped: 0,
     failed: 0,
     elapsedMs: 0,
@@ -465,7 +479,6 @@ async function processRunJobs(
 
   for (const [index, row] of rows.entries()) {
     if (!timeBudget(startedAt)) break;
-    if (result.published >= maxPublications) break;
     const currentRun = await prisma.ingestRun.findUnique({ where: { id: runId }, select: { status: true } });
     if (currentRun?.status !== "RUNNING") break;
     const current = index + 1;
@@ -479,15 +492,17 @@ async function processRunJobs(
       };
       await updateRunActivity(runId, stage.toUpperCase(), jobTitle ?? label);
       emit(stage, messages[stage] ?? `Processing ${label}…`, current, jobTitle);
-    });
+    }, result.published < maxPublications);
     result.processed += 1;
     if (outcome === "published") result.published += 1;
+    else if (outcome === "ready") result.queued += 1;
     else if (outcome === "failed") result.failed += 1;
     else result.skipped += 1;
     const finalStage = outcome === "published" ? "published" : outcome === "failed" ? "failed" : "skipped";
     const finalMessage = outcome === "published"
       ? `Published job ${current} of ${rows.length}.`
-      : outcome === "failed" ? `Job ${current} of ${rows.length} needs attention.` : `Skipped unchanged job ${current} of ${rows.length}.`;
+      : outcome === "ready" ? `Queued job ${current} of ${rows.length} for a future publication day.`
+        : outcome === "failed" ? `Job ${current} of ${rows.length} needs attention.` : `Skipped unchanged job ${current} of ${rows.length}.`;
     emit(finalStage, finalMessage, current);
   }
 
@@ -516,6 +531,7 @@ export async function importSource(
       found: activeRun.discoveredCount,
       processed: 0,
       published: 0,
+      queued: 0,
       skipped: 0,
       failed: 0,
       elapsedMs: Date.now() - startedAt,
@@ -526,7 +542,7 @@ export async function importSource(
   }
   const runId = await discoverSource(sourceId);
   if (!runId) {
-    return { ingestRunId: null, found: 0, processed: 0, published: 0, skipped: 0, failed: 0, elapsedMs: Date.now() - startedAt };
+    return { ingestRunId: null, found: 0, processed: 0, published: 0, queued: 0, skipped: 0, failed: 0, elapsedMs: Date.now() - startedAt };
   }
   return processRunJobs(runId, startedAt, report, maxPublications);
 }
@@ -559,38 +575,41 @@ export async function runTick(report?: ImportProgressReporter, options: TickOpti
   const sourceRuns: SimpleImportResult[] = [];
   const maximum = options.maxPublications ?? Number.POSITIVE_INFINITY;
   const runningRunIds = timeBudget(startedAt) ? await findRunningRunIds() : [];
-
-  for (const runId of runningRunIds) {
-    if (!timeBudget(startedAt)) break;
-    const published = sourceRuns.reduce((sum, run) => sum + run.published, 0);
-    if (published >= maximum) break;
-    sourceRuns.push(await processRunJobs(runId, startedAt, report, maximum - published));
-  }
-
   const dueSourceIds = timeBudget(startedAt) ? await findDueSourceIds() : [];
-  const activeRunIds = new Set(sourceRuns.flatMap((run) => run.ingestRunId ? [run.ingestRunId] : []));
+  const runIds = new Set(runningRunIds);
+  const newlyDiscoveredRunIds: string[] = [];
 
+  // Discover first. Processing a large source can consume the rest of this invocation, but it
+  // must not prevent the other selected sources from being checked and durably queued.
   for (const sourceId of dueSourceIds) {
     if (!timeBudget(startedAt)) break;
-    const published = sourceRuns.reduce((sum, run) => sum + run.published, 0);
-    if (published >= maximum) break;
     const alreadyActive = await prisma.ingestRun.findFirst({
       where: { sourceId, status: { in: ["RUNNING", "PAUSED"] } },
       select: { id: true, status: true },
     });
     if (alreadyActive) {
-      if (alreadyActive.status === "RUNNING" && !activeRunIds.has(alreadyActive.id)) {
-        activeRunIds.add(alreadyActive.id);
-        sourceRuns.push(await processRunJobs(alreadyActive.id, startedAt, report, maximum - published));
-      }
+      if (alreadyActive.status === "RUNNING") runIds.add(alreadyActive.id);
       continue;
     }
-    const run = await importSource(sourceId, startedAt, report, maximum - published);
-    sourceRuns.push(run);
+    const source = await prisma.source.findUnique({ where: { id: sourceId }, select: { name: true, enabled: true } });
+    if (source?.enabled) {
+      report?.({ type: "progress", stage: "discovering", message: `Checking ${source.name} for new jobs…`, sourceName: source.name, found: 0, processed: 0, published: 0, skipped: 0, failed: 0 });
+    }
+    const runId = await discoverSource(sourceId);
+    if (runId) {
+      runIds.add(runId);
+      newlyDiscoveredRunIds.push(runId);
+    }
+  }
+
+  for (const runId of runIds) {
+    if (!timeBudget(startedAt)) break;
+    const published = sourceRuns.reduce((sum, run) => sum + run.published, 0);
+    sourceRuns.push(await processRunJobs(runId, startedAt, report, Math.max(0, maximum - published)));
   }
 
   return {
-    discoveryRunIds: sourceRuns.flatMap((run) => run.ingestRunId ? [run.ingestRunId] : []),
+    discoveryRunIds: newlyDiscoveredRunIds,
     acquisitionProcessed: sourceRuns.reduce((sum, run) => sum + run.processed, 0),
     aggregationProcessed: sourceRuns.reduce((sum, run) => sum + run.published, 0),
     sourceRuns,

@@ -13,12 +13,22 @@ export default async function AdminSourcesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h1 className="text-title font-semibold">Careers sources</h1><p className="mt-2 text-body text-ink-muted">Companies checked automatically for new jobs.</p></div>
-        <Link
-          href="/admin/sources/new"
-          className="focus-ring flex h-10 items-center rounded-pill bg-ink px-4 text-meta font-medium text-surface"
-        >
-          Add source
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/api/admin/sources/export"
+            download
+            prefetch={false}
+            className="focus-ring flex h-10 items-center rounded-pill border border-line-strong bg-surface px-4 text-meta font-medium text-ink"
+          >
+            Export CSV
+          </Link>
+          <Link
+            href="/admin/sources/new"
+            className="focus-ring flex h-10 items-center rounded-pill bg-ink px-4 text-meta font-medium text-surface"
+          >
+            Add source
+          </Link>
+        </div>
       </div>
 
       {sources.length === 0 ? (

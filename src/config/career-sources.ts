@@ -318,6 +318,7 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
+      coverageHints: ["LEARNERSHIP", "APPRENTICESHIP"],
       listingUrls: ["https://www.graduates24.com/learnerships"],
       linkSelector: ".g24-job-card > a.g24-card-link",
       linkAttr: "href",
@@ -398,6 +399,7 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
+      coverageHints: ["GRADUATE_PROGRAMME"],
       listingUrls: ["https://jobs.nedbank.co.za/search/?q=graduate"],
       linkSelector: "a.jobTitle-link",
       linkAttr: "href",
@@ -411,6 +413,7 @@ export const careerSources: CreateSourceInput[] = [
     enabled: true,
     crawlConfig: {
       provider: "html",
+      coverageHints: ["INTERNSHIP", "LEARNERSHIP", "FUNDING", "GRADUATE_PROGRAMME"],
       listingUrls: ["https://npc.co.za/careers-internships-learnerships-bursaries/"],
       linkSelector: '.job-info h4 a[href*="/jobs/"]',
       linkAttr: "href",

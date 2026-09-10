@@ -24,6 +24,9 @@ const sharedCrawlConfigFields = {
   // Category-specific feeds can declare what they contain. Mixed feeds omit this and use the
   // title/description classifier for each discovered opportunity.
   categoryHint: opportunityCategorySchema.optional(),
+  // Discovery prioritisation may still know what a mixed or filtered source is likely to supply
+  // without forcing every listing from that source into one category.
+  coverageHints: z.array(opportunityCategorySchema).max(7).optional(),
 };
 
 const htmlCrawlConfigSchema = z.object({

@@ -39,10 +39,11 @@ export async function POST(request: Request) {
         total: 1,
       }));
       counters.processed = 1;
-      counters[outcome] = 1;
+      const finalStage: ImportStage = outcome === "ready" || outcome === "updated" ? "skipped" : outcome;
+      counters[finalStage] = 1;
       report({
         type: "progress",
-        stage: outcome,
+        stage: finalStage,
         message: outcome === "published" ? "Job published." : outcome === "failed" ? "The job needs attention." : "No changes were needed.",
         runId: queued.ingestRunId,
         ...counters,

@@ -314,6 +314,9 @@ export async function discoverSource(sourceId: string): Promise<string | null> {
       url: source.baseUrl,
       message: err instanceof Error ? err.message : String(err),
     });
+    // A failed attempt still counts as a check. Respect the source cadence before retrying so
+    // one broken never-run source cannot monopolize every discovery slot in the daily workflow.
+    await prisma.source.update({ where: { id: sourceId }, data: { lastRunAt: now } });
     await failRun(run.id);
     return run.id;
   }

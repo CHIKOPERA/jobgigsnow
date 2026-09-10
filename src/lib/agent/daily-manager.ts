@@ -13,10 +13,12 @@ export async function dailySiteManagerWorkflow(agentRunId: string) {
     const snapshot = await collectDailySnapshot(agentRunId);
     const learning = await learnFromDailySnapshot(agentRunId, snapshot.dateKey);
     const publishing = [];
-    for (let cycle = 1; cycle <= 3; cycle += 1) {
+    // Four bounded passes can discover twelve never-run sources (three per pass), enough to
+    // inspect a newly-added batch of eleven without relaxing the daily publication limit.
+    for (let cycle = 1; cycle <= 4; cycle += 1) {
       const result = await runGoalManagedPublishing(agentRunId, cycle);
       publishing.push(result);
-      if (result.skipped || result.published === 0) break;
+      if (result.skipped || (result.sourcesChecked === 0 && result.processed === 0)) break;
     }
     const indexing = await notifyGoogleIndexing(agentRunId);
     return await finishAgentRun(agentRunId, snapshot.dateKey, learning, publishing, indexing);

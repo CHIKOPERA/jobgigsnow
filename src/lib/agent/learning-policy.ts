@@ -30,6 +30,18 @@ export interface LearningInsight {
   evidence: Record<string, string | number | null>;
 }
 
+/** Lets a new dedicated source target a live coverage gap before it has publishing history. */
+export function coverageMatchesForDeclaredCategories(
+  categories: string[],
+  categoryCounts: Record<string, number>,
+  categoryMinimum: number,
+  labels: Record<string, string>,
+): string[] {
+  return [...new Set(categories)]
+    .filter((category) => (categoryCounts[category] ?? 0) < categoryMinimum)
+    .flatMap((category) => labels[category] ? [labels[category]] : []);
+}
+
 export function scoreSources(
   sources: SourceLearningInput[],
 ): LearnedSourceScore[] {

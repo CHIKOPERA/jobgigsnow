@@ -31,6 +31,10 @@ async function upsertTags(names: string[]) {
 export async function upsertJob(input: JobUpsertInput) {
   const company = await upsertCompany(input.companyName, input.companyDomain);
   const tagIds = await upsertTags(input.tags);
+  const existing = await prisma.job.findUnique({
+    where: { slug: input.slug },
+    select: { status: true },
+  });
 
   return prisma.job.upsert({
     where: { slug: input.slug },
@@ -77,7 +81,9 @@ export async function upsertJob(input: JobUpsertInput) {
       applyUrl: input.applyUrl ?? null,
       rewritePrompt: input.rewritePrompt ?? null,
       isNative: input.isNative,
-      status: input.status,
+      // A recrawl may update an already-live opportunity after today's publication quota has
+      // been filled. Keep it live instead of briefly moving it back into the READY queue.
+      status: existing?.status === "PUBLISHED" ? "PUBLISHED" : input.status,
       postedAt: input.postedAt ? new Date(input.postedAt) : null,
       closesAt: input.closesAt ? new Date(input.closesAt) : null,
       tags: {
