@@ -7,8 +7,8 @@ import { navItems, type NavItem } from "@/config/categories";
 
 const allOpportunityNavItems = navItems.filter(
   (item): item is Extract<NavItem, { kind: "opportunity" }> =>
-    item.kind === "opportunity" && item.category.value !== "JOB",
-);
+    item.kind === "opportunity",
+).sort((a, b) => Number(b.category.value === "JOB") - Number(a.category.value === "JOB"));
 
 export function CategoryNav({ availableCategories }: { availableCategories: OpportunityCategory[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
