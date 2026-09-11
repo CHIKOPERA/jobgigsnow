@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminAutoRefresh } from "@/components/admin/AdminAutoRefresh";
+import { ApplicationGuidanceBackfill } from "@/components/admin/ApplicationGuidanceBackfill";
 import { IssueList } from "@/components/admin/IssueList";
 import { RunControls } from "@/components/admin/RunControls";
 import { RunStatusBadge } from "@/components/admin/RunStatusBadge";
@@ -42,6 +43,8 @@ export default async function AdminDashboardPage() {
         <Link href="/admin/content?status=READY" className="focus-ring rounded-lg border border-line bg-surface p-4 hover:border-line-strong"><p className="text-[12px] text-ink-muted">Ready to publish</p><p className="mt-1 text-h2 font-medium">{metrics.readyToPublish}</p></Link>
         <Link href="/admin/activity#issues" className={`focus-ring rounded-lg border bg-surface p-4 hover:border-line-strong ${metrics.openIssues > 0 ? "border-danger/35" : "border-line"}`}><p className="text-[12px] text-ink-muted">Open issues</p><p className={`mt-1 text-h2 font-medium ${metrics.openIssues > 0 ? "text-danger" : ""}`}>{metrics.openIssues}</p></Link>
       </section>
+
+      <ApplicationGuidanceBackfill />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-body font-semibold">Current imports</h2><p className="mt-1 text-meta text-ink-muted">Progress is saved and continues to appear after refresh.</p></div>{activeRuns.length > 0 && <Link href="/admin/activity" className="focus-ring rounded-pill px-3 py-2 text-meta font-semibold">View activity →</Link>}</div>

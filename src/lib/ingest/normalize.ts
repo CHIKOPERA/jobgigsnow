@@ -45,6 +45,7 @@ export async function normalize(
     input: {
       slug,
       rawJobId,
+      applicationGuidanceGeneratedAt: new Date().toISOString(),
       category,
       highlights: [],
       ...built.fields,

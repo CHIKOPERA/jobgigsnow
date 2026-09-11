@@ -48,6 +48,7 @@ export const jobUpsertInputSchema = z.object({
   salaryPeriod: salaryPeriodSchema.nullable().optional(),
   description: z.string().min(1),
   applicationGuidance: applicationGuidanceSchema.default(EMPTY_APPLICATION_GUIDANCE),
+  applicationGuidanceGeneratedAt: z.iso.datetime().nullable().optional(),
   highlights: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   applyUrl: z.string().nullable().optional(),

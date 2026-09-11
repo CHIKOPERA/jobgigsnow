@@ -343,6 +343,7 @@ model Job {
   referenceNumber String?
   /// JobGigsNow estimate; 0/null means no estimate is available.
   estimatedApplicationMinutes Int?
+  applicationGuidanceGeneratedAt DateTime?
   /// Last admin instruction used for the optional AI rewrite on the review screen.
   rewritePrompt  String?
   /// Optimized 1200x630 image used in link previews and on the public job page.
@@ -369,6 +370,7 @@ model Job {
   tags            JobTag[]
   savedBy         SavedJob[]
   improvementRuns ImprovementRun[]
+  guidanceBackfillItems ApplicationGuidanceBackfillItem[]
 
   // The list query's primary access pattern: published jobs newest first.
   @@index([status, postedAt])
@@ -381,6 +383,53 @@ model Job {
   // Upgraded to a pg_trgm GIN index on title/description in the initial migration
   // (see prisma/migrations/*/migration.sql) — plain btree here documents intent.
   @@index([title])
+}
+
+enum ApplicationGuidanceBackfillStatus {
+  RUNNING
+  COMPLETED
+}
+
+enum ApplicationGuidanceBackfillItemStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// Temporary, admin-triggered rollout tracking for application guidance on legacy jobs.
+model ApplicationGuidanceBackfillRun {
+  id              String                              @id @default(cuid())
+  status          ApplicationGuidanceBackfillStatus   @default(RUNNING)
+  total           Int
+  completed       Int                                 @default(0)
+  failed          Int                                 @default(0)
+  currentJobTitle String?
+  startedAt       DateTime                            @default(now())
+  finishedAt      DateTime?
+  updatedAt       DateTime                            @updatedAt
+
+  items ApplicationGuidanceBackfillItem[]
+
+  @@index([status, startedAt])
+}
+
+model ApplicationGuidanceBackfillItem {
+  id        String                                @id @default(cuid())
+  runId     String
+  run       ApplicationGuidanceBackfillRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job                                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status    ApplicationGuidanceBackfillItemStatus @default(PENDING)
+  error     String?
+  claimedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime                              @default(now())
+  updatedAt DateTime                              @updatedAt
+
+  @@unique([runId, jobId])
+  @@index([runId, status])
+  @@index([status, claimedAt])
 }
 
 model Tag {
