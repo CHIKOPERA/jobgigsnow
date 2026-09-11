@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pagination } from "@/config/pagination";
+import { applicationGuidanceSchema } from "@/lib/application-guidance";
 import {
   employmentTypeSchema,
   jobIndustrySchema,
@@ -65,6 +66,7 @@ export type JobListResponse = z.infer<typeof jobListResponseSchema>;
 
 export const jobDetailSchema = jobCardSchema.extend({
   description: z.string(),
+  applicationGuidance: applicationGuidanceSchema.nullable(),
   highlights: z.array(z.string()),
   applyUrl: z.string().nullable(),
   isNative: z.boolean(),

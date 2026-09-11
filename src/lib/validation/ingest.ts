@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ingest } from "@/config/ingest";
+import { applicationGuidanceSchema, EMPTY_APPLICATION_GUIDANCE } from "@/lib/application-guidance";
 import {
   employmentTypeSchema,
   jobStatusSchema,
@@ -46,6 +47,7 @@ export const jobUpsertInputSchema = z.object({
   salaryCurrency: z.literal("ZAR").nullable().optional(),
   salaryPeriod: salaryPeriodSchema.nullable().optional(),
   description: z.string().min(1),
+  applicationGuidance: applicationGuidanceSchema.default(EMPTY_APPLICATION_GUIDANCE),
   highlights: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   applyUrl: z.string().nullable().optional(),

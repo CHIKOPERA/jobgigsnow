@@ -6,6 +6,7 @@
  */
 
 import type { JobIndustryValue, ProvinceValue } from "@/config/job-taxonomy";
+import type { ApplicationGuidance } from "@/lib/application-guidance";
 
 export type FieldSource = "jsonld" | "selectors" | "general_html" | "readability" | "ai_inference";
 
@@ -88,6 +89,7 @@ export interface NormalizedJobFields {
   salaryCurrency: string | null;
   salaryPeriod: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | null;
   description: string | null;
+  applicationGuidance: ApplicationGuidance;
   skills: string[];
   postedAt: string | null;
   closesAt: string | null;

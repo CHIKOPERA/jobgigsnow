@@ -17,7 +17,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/admin/jobs/
     if (!result.ok) {
       return errorResponse("NOT_FOUND", "Job not found.", 404);
     }
-    return Response.json({ description: result.description });
+    return Response.json({
+      description: result.description,
+      applicationGuidance: result.applicationGuidance,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse("INVALID_REWRITE", error.issues[0]?.message ?? "Enter a rewrite instruction.", 400);

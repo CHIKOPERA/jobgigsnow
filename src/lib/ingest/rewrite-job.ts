@@ -7,9 +7,15 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeJobDescription } from "@/lib/job-rich-text";
 import { getAiModel } from "./ai-model";
 import { JOBGIGSNOW_EDITORIAL_GUIDE } from "./editorial-guide";
+import {
+  APPLICATION_GUIDANCE_PROMPT,
+  applicationGuidanceSchema,
+  cleanApplicationGuidance,
+} from "@/lib/application-guidance";
 
 const rewriteOutputSchema = z.object({
   descriptionHtml: z.string().min(1),
+  applicationGuidance: applicationGuidanceSchema,
 });
 
 export async function rewriteJobDescription(jobId: string, instruction: string, currentDescription: string) {
@@ -40,7 +46,7 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
       rawJobId: job.rawJobId,
       jobId: job.id,
       model: ai.model,
-      promptVersion: "admin-rewrite-v1",
+      promptVersion: "admin-rewrite-v2-application-guidance",
       status: "RUNNING",
       startedAt: new Date(),
     },
@@ -72,16 +78,32 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
         `Official application URL: ${job.applyUrl ?? "Not provided"}`,
         "Current description:",
         currentDescription,
+        APPLICATION_GUIDANCE_PROMPT,
       ].join("\n\n"),
       output: Output.object({ schema: rewriteOutputSchema }),
     });
 
     const description = sanitizeJobDescription(output.descriptionHtml);
     if (!description) throw new Error("The rewrite returned an empty description.");
+    const applicationGuidance = cleanApplicationGuidance(output.applicationGuidance);
 
     const jobUpdate = prisma.job.update({
         where: { id: job.id },
-        data: { description, rewritePrompt: instruction, status: "READY" },
+        data: {
+          description,
+          applicationSummary: applicationGuidance.summary || null,
+          essentialRequirements: applicationGuidance.essentialRequirements,
+          preferredRequirements: applicationGuidance.preferredRequirements,
+          requiredQualifications: applicationGuidance.qualifications,
+          requiredExperience: applicationGuidance.experience,
+          documentsToPrepare: applicationGuidance.documents,
+          licenceRequirements: applicationGuidance.licences,
+          applicationMethod: applicationGuidance.applicationMethod || null,
+          referenceNumber: applicationGuidance.referenceNumber || null,
+          estimatedApplicationMinutes: applicationGuidance.estimatedApplicationMinutes || null,
+          rewritePrompt: instruction,
+          status: "READY",
+        },
       });
     if (run) {
       await prisma.$transaction([jobUpdate, prisma.improvementRun.update({
@@ -90,7 +112,13 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
           status: "SUCCEEDED",
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          diff: { kind: "admin_rewrite", instruction, before: currentDescription, after: description } as Prisma.InputJsonValue,
+          diff: {
+            kind: "admin_rewrite",
+            instruction,
+            before: currentDescription,
+            after: description,
+            applicationGuidance,
+          } as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
       })]);
@@ -98,7 +126,7 @@ export async function rewriteJobDescription(jobId: string, instruction: string, 
       await jobUpdate;
     }
 
-    return { ok: true as const, description };
+    return { ok: true as const, description, applicationGuidance };
   } catch (error) {
     const jobUpdate = prisma.job.update({ where: { id: job.id }, data: { status: "READY" } });
     if (run) {

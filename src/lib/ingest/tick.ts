@@ -79,6 +79,7 @@ interface AcquisitionCandidate {
   sourceId: string;
   ingestRunId: string | null;
   contentHash: string;
+  extractionVersion: string | null;
   updatedAt: Date;
   rawTitle: string | null;
   source: { crawlConfig: unknown } | null;
@@ -116,7 +117,8 @@ async function processAcquisition(row: AcquisitionCandidate, report?: JobStageRe
     const aggregationContext = markdown ?? readable.text;
     const newHash = hashAggregationInput(reconciled, aggregationContext);
     const isFirstFetch = row.contentHash === "";
-    const changed = isFirstFetch || newHash !== row.contentHash;
+    const contentChanged = isFirstFetch || newHash !== row.contentHash;
+    const pipelineChanged = row.extractionVersion !== aiConfig.promptVersion;
     const canonicalUrl = metadata.canonicalUrl ?? acquired.redirectedUrl ?? null;
 
     const bundle: RawExtractionBundle = {
@@ -140,20 +142,21 @@ async function processAcquisition(row: AcquisitionCandidate, report?: JobStageRe
       data: {
         payload: bundle as unknown as Prisma.InputJsonValue,
         contentHash: newHash,
+        extractionVersion: aiConfig.promptVersion,
         fetchStatus: "FETCHED",
         httpStatus: acquired.httpStatus,
         canonicalUrl,
         lastCrawledAt: new Date(),
-        lastChangedAt: changed ? new Date() : undefined,
-        // undefined (not false) when unchanged — leaves whatever needsAggregation already was,
-        // which is exactly "skip unchanged": a row already fully aggregated stays that way.
-        needsAggregation: changed ? true : undefined,
+        lastChangedAt: contentChanged ? new Date() : undefined,
+        // A prompt/schema version change re-runs aggregation even when the source text is stable;
+        // otherwise undefined leaves an already-complete unchanged row alone.
+        needsAggregation: contentChanged || pipelineChanged ? true : undefined,
       },
     });
 
     // "new" is already counted at discovery time — only changed/unchanged apply to re-fetches.
     if (!isFirstFetch) {
-      await maybeIncrementCounters(row.ingestRunId, changed ? { changedCount: 1 } : { unchangedCount: 1 });
+      await maybeIncrementCounters(row.ingestRunId, contentChanged ? { changedCount: 1 } : { unchangedCount: 1 });
     }
     await resolveFailuresForRawJob(row.id, ["ACQUISITION", "EXTRACTION"]);
     if (row.ingestRunId) await finalizeRunIfComplete(row.ingestRunId);
@@ -351,6 +354,7 @@ export async function processQueuedRawJob(
       sourceId: true,
       ingestRunId: true,
       contentHash: true,
+      extractionVersion: true,
       updatedAt: true,
       rawTitle: true,
       fetchStatus: true,
@@ -364,6 +368,7 @@ export async function processQueuedRawJob(
   const recrawlCutoff = new Date(Date.now() - ingest.recrawlAfterMs);
   const shouldAcquire =
     acquisition.fetchStatus !== "FETCHED" ||
+    acquisition.extractionVersion !== aiConfig.promptVersion ||
     acquisition.lastCrawledAt === null ||
     acquisition.lastCrawledAt < recrawlCutoff;
 
@@ -438,6 +443,8 @@ async function processRunJobs(
       OR: [
         { fetchStatus: { not: "FETCHED" } },
         { needsAggregation: true },
+        { extractionVersion: { not: aiConfig.promptVersion } },
+        { extractionVersion: null },
         { lastCrawledAt: null },
         { lastCrawledAt: { lt: recrawlCutoff } },
       ],

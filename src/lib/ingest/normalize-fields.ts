@@ -7,6 +7,7 @@ import { toEditorHtml } from "@/lib/job-rich-text";
 import type { JobIndustryValue, ProvinceValue } from "@/config/job-taxonomy";
 import { isExpiredClosingDate } from "@/lib/job-expiration";
 import type { OpportunityCategory } from "./opportunity-category";
+import type { ApplicationGuidance } from "@/lib/application-guidance";
 
 export interface NormalizedFields {
   title: string;
@@ -21,6 +22,7 @@ export interface NormalizedFields {
   salaryCurrency: "ZAR" | null;
   salaryPeriod: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | null;
   description: string;
+  applicationGuidance: ApplicationGuidance;
   tags: string[];
   applyUrl: string;
   postedAt: string | null;
@@ -92,6 +94,7 @@ export function buildNormalizedFields(
       salaryCurrency: !isNonEmploymentOpportunity && normalized.salaryMin !== null ? "ZAR" : null,
       salaryPeriod: isNonEmploymentOpportunity ? null : normalized.salaryPeriod,
       description: toEditorHtml(normalized.description!),
+      applicationGuidance: normalized.applicationGuidance,
       tags: normalized.skills,
       // No apply link found or inferred — the safe default is the page itself, since that's
       // always a valid way to apply (never null, never a fabricated URL).

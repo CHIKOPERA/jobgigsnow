@@ -6,6 +6,11 @@ Every opportunity is classified by opportunity type, industry, and South African
 search supports industry, province, work arrangement, employment type, tags, and a comparable
 monthly-Rand salary slider while preserving the source's advertised pay period.
 
+Job pages lead with a practical application summary and a structured **Before you apply** check:
+requirements, qualifications, experience, documents, licences, deadline, application method,
+reference number, and a clearly labelled time estimate. These fields stay separate from the full
+advert so editors can correct them without rewriting the source description.
+
 Add sources in the admin and use **Fetch jobs** to import that source immediately. The daily
 manager checks enabled sources in learned priority order. Each job URL is captured, rewritten,
 paired with the first Pexels image when one can be saved, and published. Image search/storage

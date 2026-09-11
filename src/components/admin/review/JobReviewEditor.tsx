@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { jobIndustries, provinces } from "@/config/job-taxonomy";
+import type { ApplicationGuidance } from "@/lib/application-guidance";
 
 const CATEGORIES = [
   ["JOB", "Job"],
@@ -16,6 +17,23 @@ const CATEGORIES = [
   ["CALL_FOR_APPLICATIONS", "Call for applications"],
   ["FUNDING", "Funding"],
 ] as const;
+
+type GuidanceListKey =
+  | "essentialRequirements"
+  | "preferredRequirements"
+  | "qualifications"
+  | "experience"
+  | "documents"
+  | "licences";
+
+const GUIDANCE_LIST_FIELDS: ReadonlyArray<readonly [GuidanceListKey, string]> = [
+  ["essentialRequirements", "Essential requirements"],
+  ["preferredRequirements", "Preferred requirements"],
+  ["qualifications", "Required qualifications"],
+  ["experience", "Required experience"],
+  ["documents", "Documents to prepare"],
+  ["licences", "Licence, registration or certification"],
+];
 
 interface ReviewJob {
   id: string;
@@ -32,7 +50,9 @@ interface ReviewJob {
   salaryMin: number | null;
   salaryMax: number | null;
   salaryPeriod: string | null;
+  closesAt: string;
   descriptionHtml: string;
+  applicationGuidance: ApplicationGuidance;
   highlights: string[];
   applyUrl: string;
   rewritePrompt: string;
@@ -94,8 +114,10 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
   const [salaryMin, setSalaryMin] = useState<number | null>(initial.salaryMin);
   const [salaryMax, setSalaryMax] = useState<number | null>(initial.salaryMax);
   const [salaryPeriod, setSalaryPeriod] = useState(initial.salaryPeriod ?? "MONTHLY");
+  const [closesAt, setClosesAt] = useState(initial.closesAt);
   const [highlights, setHighlights] = useState(initial.highlights.join("\n"));
   const [applyUrl, setApplyUrl] = useState(initial.applyUrl);
+  const [applicationGuidance, setApplicationGuidance] = useState(initial.applicationGuidance);
   const [prompt, setPrompt] = useState(initial.rewritePrompt || defaultRewritePrompt);
   const [status, setStatus] = useState(initial.status);
   const [busy, setBusy] = useState<"save" | "rewrite" | "publish" | "reject" | null>(null);
@@ -126,6 +148,7 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
   });
 
   function payload(nextStatus?: "READY" | "PUBLISHED" | "REJECTED") {
+    const cleanLines = (items: string[]) => items.map((item) => item.trim()).filter(Boolean);
     return {
       title,
       companyName,
@@ -138,7 +161,20 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
       salaryMin,
       salaryMax,
       salaryPeriod: salaryMin === null ? null : salaryPeriod,
+      closesAt: closesAt ? `${closesAt}T23:59:59.999Z` : null,
       description: editor?.getHTML() ?? initial.descriptionHtml,
+      applicationGuidance: {
+        ...applicationGuidance,
+        summary: applicationGuidance.summary.trim(),
+        essentialRequirements: cleanLines(applicationGuidance.essentialRequirements),
+        preferredRequirements: cleanLines(applicationGuidance.preferredRequirements),
+        qualifications: cleanLines(applicationGuidance.qualifications),
+        experience: cleanLines(applicationGuidance.experience),
+        documents: cleanLines(applicationGuidance.documents),
+        licences: cleanLines(applicationGuidance.licences),
+        applicationMethod: applicationGuidance.applicationMethod.trim(),
+        referenceNumber: applicationGuidance.referenceNumber.trim(),
+      },
       highlights: highlights.split("\n").map((item) => item.trim()).filter(Boolean),
       applyUrl,
       rewritePrompt: prompt,
@@ -189,6 +225,7 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error?.message ?? "The AI rewrite failed.");
       editor.commands.setContent(result.description);
+      setApplicationGuidance(result.applicationGuidance);
       setStatus("READY");
       setNotice("Rewrite complete. Review the result, then save or publish it.");
     } catch (err) {
@@ -247,6 +284,11 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
   }
 
   const fieldClass = "focus-ring mt-1.5 h-11 w-full rounded-md border border-line bg-surface px-3 text-meta";
+  const textAreaClass = "focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-2 text-meta normal-case tracking-normal";
+
+  function updateGuidance<K extends keyof ApplicationGuidance>(key: K, value: ApplicationGuidance[K]) {
+    setApplicationGuidance((current) => ({ ...current, [key]: value }));
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -321,7 +363,75 @@ export function JobReviewEditor({ initial, defaultRewritePrompt }: { initial: Re
             Apply URL
             <input type="url" value={applyUrl} onChange={(event) => setApplyUrl(event.target.value)} className={fieldClass} />
           </label>
+          <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+            Application deadline
+            <input type="date" value={closesAt} onChange={(event) => setClosesAt(event.target.value)} className={fieldClass} />
+          </label>
         </div>
+
+        <section className="mt-7 border-t border-line pt-7">
+          <p className="text-label uppercase tracking-[0.06em] text-ink-muted">Application guidance</p>
+          <p className="mt-1 text-meta text-ink-muted">
+            This appears before the full advert. Keep employer requirements separate from JobGigsNow advice.
+          </p>
+          <label className="mt-4 block text-label uppercase tracking-[0.06em] text-ink-muted">
+            Application summary
+            <textarea
+              value={applicationGuidance.summary}
+              onChange={(event) => updateGuidance("summary", event.target.value)}
+              rows={4}
+              maxLength={600}
+              placeholder="What appears to matter most, and what evidence should the applicant foreground?"
+              className={textAreaClass}
+            />
+          </label>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {GUIDANCE_LIST_FIELDS.map(([key, label]) => (
+              <label key={key} className="text-label uppercase tracking-[0.06em] text-ink-muted">
+                {label} · one per line
+                <textarea
+                  value={applicationGuidance[key].join("\n")}
+                  onChange={(event) => updateGuidance(key, event.target.value.split("\n"))}
+                  rows={5}
+                  className={textAreaClass}
+                />
+              </label>
+            ))}
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
+              How to apply
+              <textarea
+                value={applicationGuidance.applicationMethod}
+                onChange={(event) => updateGuidance("applicationMethod", event.target.value)}
+                rows={3}
+                maxLength={600}
+                className={textAreaClass}
+              />
+            </label>
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+              Reference number
+              <input
+                value={applicationGuidance.referenceNumber}
+                onChange={(event) => updateGuidance("referenceNumber", event.target.value)}
+                maxLength={160}
+                className={fieldClass}
+              />
+            </label>
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+              Estimated application time · minutes
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={applicationGuidance.estimatedApplicationMinutes || ""}
+                onChange={(event) => updateGuidance(
+                  "estimatedApplicationMinutes",
+                  event.target.value === "" ? 0 : Number(event.target.value),
+                )}
+                className={fieldClass}
+              />
+            </label>
+          </div>
+        </section>
 
         <div className="mt-7">
           <p className="text-label uppercase tracking-[0.06em] text-ink-muted">Description</p>

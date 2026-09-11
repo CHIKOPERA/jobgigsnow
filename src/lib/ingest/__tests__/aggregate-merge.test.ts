@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { zodSchema } from "ai";
 import { aiOutputSchema, buildPrompt, toAggregationResult, type AiOutput } from "../aggregate-merge";
 import type { ReconciledFields } from "../types";
+import { EMPTY_APPLICATION_GUIDANCE } from "@/lib/application-guidance";
 
 const URL = "https://example.com/jobs/8842";
 
@@ -27,6 +28,7 @@ function aiOutput(overrides: Partial<AiOutput> = {}): AiOutput {
     industry: "OTHER",
     province: "NATIONWIDE",
     description: null,
+    applicationGuidance: EMPTY_APPLICATION_GUIDANCE,
     applyUrl: null,
     remoteType: null,
     employmentType: null,
@@ -53,10 +55,26 @@ function aiOutput(overrides: Partial<AiOutput> = {}): AiOutput {
 test("OpenAI strict schema requires every inferred confidence field", () => {
   const jsonSchema = zodSchema(aiOutputSchema).jsonSchema as {
     required?: string[];
-    properties?: { inferredFieldConfidence?: { required?: string[] } };
+    properties?: {
+      applicationGuidance?: { required?: string[] };
+      inferredFieldConfidence?: { required?: string[] };
+    };
   };
   assert.ok(jsonSchema.required?.includes("industry"));
   assert.ok(jsonSchema.required?.includes("province"));
+  assert.ok(jsonSchema.required?.includes("applicationGuidance"));
+  assert.deepEqual(jsonSchema.properties?.applicationGuidance?.required, [
+    "summary",
+    "essentialRequirements",
+    "preferredRequirements",
+    "qualifications",
+    "experience",
+    "documents",
+    "licences",
+    "applicationMethod",
+    "referenceNumber",
+    "estimatedApplicationMinutes",
+  ]);
   assert.deepEqual(jsonSchema.properties?.inferredFieldConfidence?.required, [
     "remoteType",
     "employmentType",
@@ -81,6 +99,8 @@ test("automatic job creation applies the JobGigsNow editorial guide", () => {
   assert.match(prompt, /do not add a visible SEO-keyword dump/);
   assert.match(prompt, /Classify every opportunity into exactly one industry/);
   assert.match(prompt, /Only return salary amounts when the source\s+states R, rand, or ZAR/);
+  assert.match(prompt, /Build applicationGuidance as a separate, quick-scan companion/);
+  assert.match(prompt, /Never turn JobGigsNow advice into an official requirement/);
 });
 
 test("keeps the deterministic candidate's source/confidence when the AI agrees", () => {
@@ -182,4 +202,23 @@ test("sourceUrl and externalId both default to the page URL", () => {
   const result = toAggregationResult(URL, reconciled(), aiOutput());
   assert.equal(result.normalized.sourceUrl, URL);
   assert.equal(result.normalized.externalId, URL);
+});
+
+test("cleans structured application guidance before normalization", () => {
+  const result = toAggregationResult(
+    URL,
+    reconciled(),
+    aiOutput({
+      applicationGuidance: {
+        ...EMPTY_APPLICATION_GUIDANCE,
+        summary: "  Focus on safe equipment handling.  ",
+        essentialRequirements: [" Forklift licence ", "Forklift licence", ""],
+        estimatedApplicationMinutes: 15,
+      },
+    }),
+  );
+
+  assert.equal(result.normalized.applicationGuidance.summary, "Focus on safe equipment handling.");
+  assert.deepEqual(result.normalized.applicationGuidance.essentialRequirements, ["Forklift licence"]);
+  assert.equal(result.normalized.applicationGuidance.estimatedApplicationMinutes, 15);
 });

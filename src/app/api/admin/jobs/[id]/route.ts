@@ -7,6 +7,7 @@ import { slugify } from "@/lib/slug";
 import { errorResponse } from "@/lib/validation/common";
 import { jobReviewPatchSchema } from "@/lib/validation/job-review";
 import { isExpiredClosingDate } from "@/lib/job-expiration";
+import { cleanApplicationGuidance } from "@/lib/application-guidance";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/admin/jobs/[id]">) {
   const admin = await requireAdmin();
@@ -28,11 +29,19 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
       select: { id: true, postedAt: true, publishedAt: true, closesAt: true },
     });
     if (!existing) return errorResponse("NOT_FOUND", "Job not found.", 404);
-    if (body.status === "PUBLISHED" && isExpiredClosingDate(existing.closesAt)) {
+    const nextClosesAt = body.closesAt === undefined
+      ? existing.closesAt
+      : body.closesAt
+        ? new Date(body.closesAt)
+        : null;
+    if (body.status === "PUBLISHED" && isExpiredClosingDate(nextClosesAt)) {
       return errorResponse("JOB_EXPIRED", "An expired job cannot be published.", 400);
     }
 
     const description = body.description ? sanitizeJobDescription(body.description) : undefined;
+    const applicationGuidance = body.applicationGuidance
+      ? cleanApplicationGuidance(body.applicationGuidance)
+      : undefined;
     if (body.description && !description) {
       return errorResponse("INVALID_DESCRIPTION", "The job description cannot be empty.", 400);
     }
@@ -63,7 +72,26 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/admin/jobs
         salaryMax: body.salaryMax,
         salaryCurrency: body.salaryMin === null ? null : body.salaryMin === undefined ? undefined : "ZAR",
         salaryPeriod: body.salaryPeriod,
+        closesAt: body.closesAt === undefined ? undefined : nextClosesAt,
         description,
+        applicationSummary: applicationGuidance
+          ? applicationGuidance.summary || null
+          : undefined,
+        essentialRequirements: applicationGuidance?.essentialRequirements,
+        preferredRequirements: applicationGuidance?.preferredRequirements,
+        requiredQualifications: applicationGuidance?.qualifications,
+        requiredExperience: applicationGuidance?.experience,
+        documentsToPrepare: applicationGuidance?.documents,
+        licenceRequirements: applicationGuidance?.licences,
+        applicationMethod: applicationGuidance
+          ? applicationGuidance.applicationMethod || null
+          : undefined,
+        referenceNumber: applicationGuidance
+          ? applicationGuidance.referenceNumber || null
+          : undefined,
+        estimatedApplicationMinutes: applicationGuidance
+          ? applicationGuidance.estimatedApplicationMinutes || null
+          : undefined,
         highlights: body.highlights,
         applyUrl: body.applyUrl,
         rewritePrompt: body.rewritePrompt,

@@ -1,7 +1,11 @@
 import { z } from "zod";
+import { applicationGuidanceSchema, EMPTY_APPLICATION_GUIDANCE } from "@/lib/application-guidance";
 import { employmentTypeSchema, jobIndustrySchema, opportunityCategorySchema, provinceSchema, remoteTypeSchema, salaryPeriodSchema } from "./common";
 
 const nullableUrl = z.union([z.url(), z.literal("")]).transform((value) => value || null);
+const nullableDate = z
+  .union([z.iso.date(), z.iso.datetime(), z.literal(""), z.null()])
+  .transform((value) => value || null);
 
 export const jobReviewPatchSchema = z
   .object({
@@ -16,7 +20,9 @@ export const jobReviewPatchSchema = z
     salaryMin: z.number().int().nonnegative().nullable().optional(),
     salaryMax: z.number().int().nonnegative().nullable().optional(),
     salaryPeriod: salaryPeriodSchema.nullable().optional(),
+    closesAt: nullableDate.optional(),
     description: z.string().min(1).max(200_000).optional(),
+    applicationGuidance: applicationGuidanceSchema.optional(),
     highlights: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     applyUrl: nullableUrl.optional(),
     rewritePrompt: z.string().trim().max(4_000).nullable().optional(),
@@ -41,7 +47,9 @@ export const manualJobCreateSchema = z.object({
   salaryMin: z.number().int().nonnegative().nullable().default(null),
   salaryMax: z.number().int().nonnegative().nullable().default(null),
   salaryPeriod: salaryPeriodSchema.nullable().default(null),
+  closesAt: nullableDate.default(null),
   description: z.string().trim().min(1).max(200_000),
+  applicationGuidance: applicationGuidanceSchema.default(EMPTY_APPLICATION_GUIDANCE),
   highlights: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
   applyUrl: nullableUrl,
 });

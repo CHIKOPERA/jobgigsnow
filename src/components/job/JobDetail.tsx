@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { SaveButton } from "./SaveButton";
 import { ApplyLink } from "./ApplyLink";
+import { ApplicationGuidance } from "./ApplicationGuidance";
 import { descriptionContainsHtml, sanitizeJobDescription } from "@/lib/job-rich-text";
 import { jobIndustries, provinces } from "@/config/job-taxonomy";
 
@@ -89,6 +90,12 @@ export function JobDetail({ job, saved, image }: JobDetailProps) {
       <p className="mt-3 text-meta text-ink-muted">
         {isClosed ? "This posting is no longer accepting applications." : formatRelativeTime(job.postedAt)}
       </p>
+
+      <ApplicationGuidance
+        guidance={job.applicationGuidance}
+        closesAt={job.closesAt}
+        applyUrl={job.applyUrl}
+      />
 
       {image && (
         <figure className="mt-6 overflow-hidden rounded-md border border-line bg-bg">

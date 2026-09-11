@@ -6,5 +6,5 @@ export const ai = {
   model: env.AI_MODEL,
   anthropicApiKey: env.ANTHROPIC_API_KEY,
   openaiApiKey: env.OPENAI_API_KEY,
-  promptVersion: "v1",
+  promptVersion: "v2-application-guidance",
 } as const;

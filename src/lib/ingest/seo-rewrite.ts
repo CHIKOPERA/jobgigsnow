@@ -5,17 +5,25 @@ import { getAiModel } from "./ai-model";
 import { sanitizeJobDescription } from "@/lib/job-rich-text";
 import { buildSeoRewritePrompt, seoRewriteGroundingError, type SeoRewriteContext } from "./seo-rewrite-prompt";
 import { getSeoRewritePrompt } from "./settings";
+import {
+  APPLICATION_GUIDANCE_PROMPT,
+  applicationGuidanceSchema,
+  cleanApplicationGuidance,
+  type ApplicationGuidance,
+} from "@/lib/application-guidance";
 
 const seoOutputSchema = z.object({
   title: z.string().min(1),
   descriptionHtml: z.string().min(1),
   tags: z.array(z.string()),
+  applicationGuidance: applicationGuidanceSchema,
 });
 
 export interface SeoRewriteOutcome {
   title: string;
   description: string;
   tags: string[];
+  applicationGuidance: ApplicationGuidance;
   promptTemplate: string;
   inputTokens: number | undefined;
   outputTokens: number | undefined;
@@ -40,7 +48,7 @@ export async function seoRewrite(ctx: SeoRewriteContext): Promise<SeoRewriteOutc
   const { output, usage } = await generateText({
     model: getAiModel(),
     system: SYSTEM_PROMPT,
-    prompt,
+    prompt: `${prompt}\n\n${APPLICATION_GUIDANCE_PROMPT}`,
     output: Output.object({ schema: seoOutputSchema }),
   });
 
@@ -54,6 +62,7 @@ export async function seoRewrite(ctx: SeoRewriteContext): Promise<SeoRewriteOutc
     title: ctx.title,
     description,
     tags: output.tags.length > 0 ? output.tags : ctx.tags,
+    applicationGuidance: cleanApplicationGuidance(output.applicationGuidance),
     promptTemplate: template,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,

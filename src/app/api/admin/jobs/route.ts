@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import { errorResponse } from "@/lib/validation/common";
 import { manualJobCreateSchema } from "@/lib/validation/job-review";
+import { cleanApplicationGuidance } from "@/lib/application-guidance";
 
 export async function POST(request: Request) {
   const admin = await requireAdmin();
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
 
   try {
     const body = manualJobCreateSchema.parse(await request.json());
+    const applicationGuidance = cleanApplicationGuidance(body.applicationGuidance);
     const companySlug = slugify(body.companyName);
     const company = await prisma.company.upsert({
       where: { slug: companySlug },
@@ -38,7 +40,18 @@ export async function POST(request: Request) {
         salaryMax: body.salaryMax,
         salaryCurrency: body.salaryMin === null ? null : "ZAR",
         salaryPeriod: body.salaryPeriod,
+        closesAt: body.closesAt ? new Date(body.closesAt) : null,
         description: sanitizeJobDescription(toEditorHtml(body.description)),
+        applicationSummary: applicationGuidance.summary || null,
+        essentialRequirements: applicationGuidance.essentialRequirements,
+        preferredRequirements: applicationGuidance.preferredRequirements,
+        requiredQualifications: applicationGuidance.qualifications,
+        requiredExperience: applicationGuidance.experience,
+        documentsToPrepare: applicationGuidance.documents,
+        licenceRequirements: applicationGuidance.licences,
+        applicationMethod: applicationGuidance.applicationMethod || null,
+        referenceNumber: applicationGuidance.referenceNumber || null,
+        estimatedApplicationMinutes: applicationGuidance.estimatedApplicationMinutes || null,
         highlights: body.highlights,
         applyUrl: body.applyUrl,
         status: "READY",

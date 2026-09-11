@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { filters } from "@/config/filters";
 import type { JobCardDto, JobDetailDto } from "./validation/job";
 import { plainTextDescription } from "./job-seo";
+import { cleanApplicationGuidance, hasApplicationGuidance } from "./application-guidance";
 
 export const jobCardSelect = {
   id: true,
@@ -33,6 +34,16 @@ export type JobCardRow = Prisma.JobGetPayload<{ select: typeof jobCardSelect }>;
 export const jobDetailSelect = {
   ...jobCardSelect,
   description: true,
+  applicationSummary: true,
+  essentialRequirements: true,
+  preferredRequirements: true,
+  requiredQualifications: true,
+  requiredExperience: true,
+  documentsToPrepare: true,
+  licenceRequirements: true,
+  applicationMethod: true,
+  referenceNumber: true,
+  estimatedApplicationMinutes: true,
   highlights: true,
   applyUrl: true,
   isNative: true,
@@ -77,9 +88,22 @@ export function toJobCard(row: JobCardRow): JobCardDto {
 }
 
 export function toJobDetail(row: JobDetailRow): JobDetailDto {
+  const applicationGuidance = cleanApplicationGuidance({
+    summary: row.applicationSummary ?? "",
+    essentialRequirements: row.essentialRequirements,
+    preferredRequirements: row.preferredRequirements,
+    qualifications: row.requiredQualifications,
+    experience: row.requiredExperience,
+    documents: row.documentsToPrepare,
+    licences: row.licenceRequirements,
+    applicationMethod: row.applicationMethod ?? "",
+    referenceNumber: row.referenceNumber ?? "",
+    estimatedApplicationMinutes: row.estimatedApplicationMinutes ?? 0,
+  });
   return {
     ...toJobCard(row),
     description: row.description,
+    applicationGuidance: hasApplicationGuidance(applicationGuidance) ? applicationGuidance : null,
     highlights: row.highlights,
     applyUrl: row.applyUrl,
     isNative: row.isNative,

@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import type { ApplicationGuidance } from "../src/lib/application-guidance";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -70,6 +71,7 @@ type JobSeed = {
   highlights: string[];
   description: string;
   tags: string[];
+  applicationGuidance?: Partial<ApplicationGuidance>;
 };
 
 const JOB_TEMPLATES: JobSeed[] = [
@@ -85,6 +87,18 @@ const JOB_TEMPLATES: JobSeed[] = [
     description:
       "Pick, pack and stage outbound orders in a climate-controlled distribution center. Full training provided on powered equipment for candidates without prior warehouse experience.",
     tags: ["entry-level", "benefits"],
+    applicationGuidance: {
+      summary: "This employer appears to care most about order fulfilment, safe warehouse work and learning powered equipment. Your CV should show relevant examples of handling orders safely or learning equipment quickly.",
+      essentialRequirements: [],
+      preferredRequirements: [],
+      qualifications: [],
+      experience: [],
+      documents: [],
+      licences: [],
+      applicationMethod: "Complete the application on the employer’s careers page.",
+      referenceNumber: "",
+      estimatedApplicationMinutes: 15,
+    },
   },
   {
     title: "Registered Nurse — Med-Surg",
@@ -503,6 +517,16 @@ async function main() {
         salaryMax: template.salaryMax,
         salaryPeriod: template.salaryPeriod,
         description: template.description,
+        applicationSummary: template.applicationGuidance?.summary ?? null,
+        essentialRequirements: template.applicationGuidance?.essentialRequirements ?? [],
+        preferredRequirements: template.applicationGuidance?.preferredRequirements ?? [],
+        requiredQualifications: template.applicationGuidance?.qualifications ?? [],
+        requiredExperience: template.applicationGuidance?.experience ?? [],
+        documentsToPrepare: template.applicationGuidance?.documents ?? [],
+        licenceRequirements: template.applicationGuidance?.licences ?? [],
+        applicationMethod: template.applicationGuidance?.applicationMethod ?? null,
+        referenceNumber: template.applicationGuidance?.referenceNumber ?? null,
+        estimatedApplicationMinutes: template.applicationGuidance?.estimatedApplicationMinutes ?? null,
         highlights: template.highlights,
         applyUrl: `https://${company.domain}/careers/${slugBase}`,
         isNative: false,

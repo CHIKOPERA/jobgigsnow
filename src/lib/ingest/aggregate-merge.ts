@@ -7,6 +7,11 @@ import { z } from "zod";
 import { jobIndustryValues, provinceValues } from "@/config/job-taxonomy";
 import type { AggregationResult, FieldSource, NormalizedJobFields, ReconciledFields } from "./types";
 import { JOBGIGSNOW_EDITORIAL_GUIDE } from "./editorial-guide";
+import {
+  APPLICATION_GUIDANCE_PROMPT,
+  applicationGuidanceSchema,
+  cleanApplicationGuidance,
+} from "@/lib/application-guidance";
 
 // Below this self-reported confidence, an AI-only field (no deterministic candidate backing it)
 // is nulled out rather than trusted.
@@ -19,6 +24,7 @@ export const aiOutputSchema = z.object({
   industry: z.enum(jobIndustryValues),
   province: z.enum(provinceValues),
   description: z.string().nullable(),
+  applicationGuidance: applicationGuidanceSchema,
   applyUrl: z.string().nullable(),
   remoteType: z.enum(["ONSITE", "HYBRID", "REMOTE"]).nullable(),
   employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP", "TEMPORARY"]).nullable(),
@@ -80,6 +86,7 @@ Instructions:
 - Follow this editorial guide when writing the description. Relevant sections should be useful and
   complete, but do not pad a short source with unsupported content:
 ${JOBGIGSNOW_EDITORIAL_GUIDE}
+${APPLICATION_GUIDANCE_PROMPT}
 - remoteType and employmentType are required on every job record, so make your best good-faith
   reading whenever the content gives any signal, and treat direct keywords as high confidence
   (0.8+), not as something to be cautious about — this is reading stated content, not inventing:
@@ -149,6 +156,7 @@ export function toAggregationResult(externalUrl: string, reconciled: ReconciledF
     industry: ai.industry,
     province: ai.province,
     description: null,
+    applicationGuidance: cleanApplicationGuidance(ai.applicationGuidance),
     applyUrl: null,
     remoteType: null,
     employmentType: null,

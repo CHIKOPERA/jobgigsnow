@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildNormalizedFields } from "../normalize-fields";
 import type { AggregationResult, NormalizedJobFields } from "../types";
+import { EMPTY_APPLICATION_GUIDANCE } from "@/lib/application-guidance";
 
 const URL = "https://example.com/jobs/8842";
 
@@ -21,6 +22,7 @@ function normalized(overrides: Partial<NormalizedJobFields> = {}): NormalizedJob
     salaryCurrency: null,
     salaryPeriod: null,
     description: "Lift things safely.",
+    applicationGuidance: EMPTY_APPLICATION_GUIDANCE,
     skills: [],
     postedAt: null,
     closesAt: null,
@@ -138,4 +140,15 @@ test("maps skills straight through to tags", () => {
   const result = buildNormalizedFields(aggregation({ skills: ["forklift", "safety"] }), URL);
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual(result.fields.tags, ["forklift", "safety"]);
+});
+
+test("maps application guidance through without merging it into the advert", () => {
+  const applicationGuidance = {
+    ...EMPTY_APPLICATION_GUIDANCE,
+    summary: "Safety and accurate stock handling appear to matter most.",
+    essentialRequirements: ["Valid forklift licence"],
+  };
+  const result = buildNormalizedFields(aggregation({ applicationGuidance }), URL);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.fields.applicationGuidance, applicationGuidance);
 });

@@ -25,6 +25,9 @@ export default function EditorialPolicyPage() {
       <p>
         Editing is intended to improve structure and plain-language readability. It must not invent responsibilities, qualifications, compensation, deadlines or guarantees. When the source is unclear, we omit the uncertain claim or hold the listing for further review.
       </p>
+      <p>
+        Application summaries and “Before you apply” details separate JobGigsNow guidance from information stated in the official advert. Missing requirements are identified as unspecified rather than guessed, and application-time estimates are labelled as JobGigsNow estimates.
+      </p>
 
       <h2>Freshness and corrections</h2>
       <p>

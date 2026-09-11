@@ -331,6 +331,18 @@ model Job {
   salaryPeriod   SalaryPeriod?
   /// Rewritten, brand-voice, post-ready description (phase 2 output).
   description    String
+  /// Applicant-first interpretation and source-grounded facts shown before the full advert.
+  applicationSummary String?
+  essentialRequirements String[] @default([])
+  preferredRequirements String[] @default([])
+  requiredQualifications String[] @default([])
+  requiredExperience String[] @default([])
+  documentsToPrepare String[] @default([])
+  licenceRequirements String[] @default([])
+  applicationMethod String?
+  referenceNumber String?
+  /// JobGigsNow estimate; 0/null means no estimate is available.
+  estimatedApplicationMinutes Int?
   /// Last admin instruction used for the optional AI rewrite on the review screen.
   rewritePrompt  String?
   /// Optimized 1200x630 image used in link previews and on the public job page.

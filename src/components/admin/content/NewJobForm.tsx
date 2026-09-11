@@ -27,6 +27,7 @@ export function NewJobForm() {
     setError(null);
     const form = new FormData(event.currentTarget);
     const numberOrNull = (value: FormDataEntryValue | null) => value === null || value === "" ? null : Number(value);
+    const lines = (name: string) => String(form.get(name) ?? "").split("\n").map((item) => item.trim()).filter(Boolean);
     try {
       const response = await fetch("/api/admin/jobs", {
         method: "POST",
@@ -43,8 +44,23 @@ export function NewJobForm() {
           salaryMin: numberOrNull(form.get("salaryMin")),
           salaryMax: numberOrNull(form.get("salaryMax")),
           salaryPeriod: form.get("salaryPeriod") || null,
+          closesAt: form.get("closesAt")
+            ? `${String(form.get("closesAt"))}T23:59:59.999Z`
+            : null,
           applyUrl: form.get("applyUrl"),
           description: form.get("description"),
+          applicationGuidance: {
+            summary: String(form.get("applicationSummary") ?? "").trim(),
+            essentialRequirements: lines("essentialRequirements"),
+            preferredRequirements: lines("preferredRequirements"),
+            qualifications: lines("qualifications"),
+            experience: lines("experience"),
+            documents: lines("documents"),
+            licences: lines("licences"),
+            applicationMethod: String(form.get("applicationMethod") ?? "").trim(),
+            referenceNumber: String(form.get("referenceNumber") ?? "").trim(),
+            estimatedApplicationMinutes: numberOrNull(form.get("estimatedApplicationMinutes")) ?? 0,
+          },
           highlights: String(form.get("highlights") ?? "").split("\n").map((item) => item.trim()).filter(Boolean),
         }),
       });
@@ -120,12 +136,51 @@ export function NewJobForm() {
           Apply URL
           <input name="applyUrl" type="url" placeholder="https://…" className={fieldClass} />
         </label>
+        <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+          Application deadline
+          <input name="closesAt" type="date" className={fieldClass} />
+        </label>
         <details className="rounded-lg border border-line bg-surface-sunk p-4 sm:col-span-2">
           <summary className="focus-ring cursor-pointer rounded-sm text-meta font-semibold">JobGigsNow writing guide</summary>
           <p className="mt-3 text-meta text-ink-muted">Paste the official vacancy information first. On the review screen, the AI rewrite uses this guide:</p>
           <ul className="mt-3 grid gap-2 text-meta text-ink-muted sm:grid-cols-2">
             {JOB_CREATION_CHECKLIST.map((item) => <li key={item} className="flex items-start gap-2"><span aria-hidden="true" className="text-ink">✓</span><span>{item}</span></li>)}
           </ul>
+        </details>
+        <details className="rounded-lg border border-line bg-surface-sunk p-4 sm:col-span-2">
+          <summary className="focus-ring cursor-pointer rounded-sm text-meta font-semibold">Application guidance (optional)</summary>
+          <p className="mt-3 text-meta text-ink-muted">Add quick-scan guidance now, or let the AI prepare it on the review screen.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
+              Application summary
+              <textarea name="applicationSummary" rows={3} maxLength={600} className="focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-3 text-meta normal-case tracking-normal" />
+            </label>
+            {[
+              ["essentialRequirements", "Essential requirements"],
+              ["preferredRequirements", "Preferred requirements"],
+              ["qualifications", "Required qualifications"],
+              ["experience", "Required experience"],
+              ["documents", "Documents to prepare"],
+              ["licences", "Licence, registration or certification"],
+            ].map(([name, label]) => (
+              <label key={name} className="text-label uppercase tracking-[0.06em] text-ink-muted">
+                {label} · one per line
+                <textarea name={name} rows={4} className="focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-3 text-meta normal-case tracking-normal" />
+              </label>
+            ))}
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
+              How to apply
+              <textarea name="applicationMethod" rows={3} maxLength={600} className="focus-ring mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-3 text-meta normal-case tracking-normal" />
+            </label>
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+              Reference number
+              <input name="referenceNumber" maxLength={160} className={fieldClass} />
+            </label>
+            <label className="text-label uppercase tracking-[0.06em] text-ink-muted">
+              Estimated application time · minutes
+              <input name="estimatedApplicationMinutes" type="number" min="0" max="120" className={fieldClass} />
+            </label>
+          </div>
         </details>
         <label className="text-label uppercase tracking-[0.06em] text-ink-muted sm:col-span-2">
           Official vacancy information

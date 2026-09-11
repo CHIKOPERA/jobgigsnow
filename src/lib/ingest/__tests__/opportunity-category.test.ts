@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyOpportunity, deriveOpportunityTags } from "../opportunity-category";
 import type { NormalizedJobFields } from "../types";
+import { EMPTY_APPLICATION_GUIDANCE } from "@/lib/application-guidance";
 
 function listing(overrides: Partial<NormalizedJobFields> = {}): NormalizedJobFields {
   return {
@@ -13,6 +14,7 @@ function listing(overrides: Partial<NormalizedJobFields> = {}): NormalizedJobFie
     industry: "OTHER",
     province: "GAUTENG",
     description: "<p>Applications are open for this position.</p>",
+    applicationGuidance: EMPTY_APPLICATION_GUIDANCE,
     applyUrl: "https://example.com/apply",
     remoteType: "ONSITE",
     employmentType: "FULL_TIME",
